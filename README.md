@@ -9,7 +9,6 @@ A production-ready, serverless financial AI agent built with **FastAPI**, **Lang
 <details>
 <summary><b>1. Infrastructure Foundation (Terraform)</b></summary>
 
-- **Multi-Architecture Support:** Resolved Rosetta 2 translation errors by standardizing on `arm64` for Terraform and providers.
 - **Base Resources:** Provisioned Cognito User Pools, S3 Buckets, ECR Repositories, and IAM Roles.
 - **Provider Pinning:** Locked AWS and Random providers to latest stable versions.
 </details>
