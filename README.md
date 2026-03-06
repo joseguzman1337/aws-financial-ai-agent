@@ -112,50 +112,38 @@ bash .husky/pre-commit
 
 ---
 
-## 📖 Requirements Traceability (Proof of Work)
+## 📖 Wiki & Live Verification Guide
 
 <details>
-<summary><b>1. AWS Cloud Services (Minimum Requirements)</b></summary>
+<summary><b>1. Proof of Work (Task 1 Requirements)</b></summary>
 
 - **AWS Agentcore:** Fully provisioned via `aws_bedrockagentcore_agent_runtime` in `terraform/main.tf`.
 - **AWS Cognito:** Implemented `aws_cognito_user_pool` for secure inbound authorization.
-</details>
-
-<details>
-<summary><b>2. Backend Implementation (Python/FastAPI)</b></summary>
-
 - **FastAPI Hosting:** `python/main.py` serves the Agentcore `/invocations` and `/ping` contract.
 - **LangGraph Orchestration:** `python/agent.py` implements a ReAct-type agent using `create_react_agent`.
 - **Event Streaming:** Implemented using `.astream()` with `StreamingResponse(media_type="text/event-stream")`.
-- **Observability:** Integrated **Langfuse Cloud** via `CallbackHandler` in `python/main.py`.
+- **yfinance Integration:** Two native tools implemented in `python/tools.py` (`retrieve_realtime_stock_price`, `retrieve_historical_stock_price`).
+- **RAG Knowledge Base:** Deployed `aws_bedrockagent_knowledge_base` with ingested 2024/2025 Amazon financial filings.
 </details>
 
 <details>
-<summary><b>3. Financial Tools & Knowledge Base</b></summary>
+<summary><b>2. Live Verification Steps</b></summary>
 
-- **yfinance Integration:** Two native tools implemented in `python/tools.py`:
-  - `retrieve_realtime_stock_price`
-  - `retrieve_historical_stock_price`
-- **RAG Knowledge Base:**
-  - Deployed `aws_bedrockagent_knowledge_base` using **Titan Text Embeddings**.
-  - Ingested 3 required Amazon PDFs: **2024 Annual Report**, **Q2 2025**, and **Q3 2025 Earnings Releases**.
-  - Tool `retrieve_knowledge_base_docs` provided for agent retrieval.
+Recruiters can verify the live deployment using the following steps:
+
+1. **Open `invocation_demo.ipynb`**: This notebook contains the executable proof.
+2. **Step 1: Identity Verification**: Run the first cell to authenticate against the Cognito User Pool. This proves the secure inbound authorization requirement.
+3. **Step 2: Live Agent Invocation**: Run the second and third cells. This will call the **live AWS Agentcore URL**.
+   - Observe the **Real-time Streaming**: Responses are yield token-by-token using Server-Sent Events (SSE).
+   - Check the **Knowledge Base**: The agent will retrieve data from the 2024 Annual Report (e.g., North America office space) and 2025 releases.
+4. **Step 3: Observability Audit**: Run the final cell. This fetches the trace data directly from the **Langfuse API**, proving that every reasoning step, tool call, and LLM interaction is being monitored and recorded.
 </details>
 
 <details>
-<summary><b>4. User Acceptance Criteria (Jupyter Notebook)</b></summary>
+<summary><b>3. Troubleshooting Verification</b></summary>
 
-The `invocation_demo.ipynb` provides end-to-end proof:
-- **Cognito Auth:** Demonstrates acquiring a JWT token via `client.initiate_auth`.
-- **Endpoint Invocation:** Calls the live Agentcore URL with the `Authorization` header.
-- **Streaming Verification:** Processes SSE (Server-Sent Events) in real-time.
-- **Required Queries Answered:**
-  - Real-time stock price for Amazon.
-  - Q4 2024 historical OHLC data.
-  - Earnings vs. Analyst predictions comparison.
-  - AMZN AI business research (Trainium2/Rufus).
-  - 2024 North America office space (9.2M sq ft).
-- **Observability Proof:** Includes API responses for **Langfuse Traces**.
+- **Expired Token**: If you receive a `401 Unauthorized`, re-run the Cognito authentication cell to refresh your Bearer token.
+- **Empty Trace**: If Langfuse returns an empty array, ensure the `sessionId` in the API call matches the one used in the invocation headers.
 </details>
 
 ---
