@@ -17,9 +17,5 @@ COPY --chown=appuser:appuser python/agent.py python/main.py python/tools.py ./
 # Expose port 8080
 EXPOSE 8080
 
-# Healthcheck with increased grace period for Python 3.13 cold starts
-HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=5 \
-  CMD python3 -c "import urllib.request; import sys; try: urllib.request.urlopen('http://localhost:8080/ping', timeout=10); sys.exit(0); except Exception: sys.exit(1)"
-
 # Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--log-level", "info", "--timeout-keep-alive", "120"]

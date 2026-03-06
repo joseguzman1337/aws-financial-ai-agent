@@ -1,27 +1,35 @@
 """
-This module configures the ReAct agent using LangGraph and OpenAI.
+This module configures the ReAct agent using LangGraph and AWS Bedrock.
+Agent initialization is deferred until first invocation so the /ping health
+check responds immediately (prevents Bedrock AgentCore 424 startup errors).
 """
 
-from langchain_aws import ChatBedrock
+from langchain_aws import ChatBedrockConverse
 from langgraph.prebuilt import create_react_agent
 from tools import (
     retrieve_historical_stock_price,
     retrieve_knowledge_base_docs,
+    retrieve_news_sentiment,
     retrieve_realtime_stock_price,
 )
 
-# Using ChatBedrock to utilize AWS Bedrock models as requested by task1.txt
-model = ChatBedrock(
-    model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
-    model_kwargs={"temperature": 0},
-    region_name="us-east-1",
-)
+_agent_graph = None
 
-tools = [
-    retrieve_realtime_stock_price,
-    retrieve_historical_stock_price,
-    retrieve_knowledge_base_docs,
-]
 
-# ReAct framework orchestrates the Reason + Act loop
-agent_graph = create_react_agent(model, tools=tools)
+def get_agent_graph():
+    """Returns the ReAct agent graph, initializing it on first call."""
+    global _agent_graph
+    if _agent_graph is None:
+        model = ChatBedrockConverse(
+            model="us.anthropic.claude-opus-4-6-v1",
+            temperature=0,
+            region_name="us-east-1",
+        )
+        tools = [
+            retrieve_realtime_stock_price,
+            retrieve_historical_stock_price,
+            retrieve_news_sentiment,
+            retrieve_knowledge_base_docs,
+        ]
+        _agent_graph = create_react_agent(model, tools=tools)
+    return _agent_graph

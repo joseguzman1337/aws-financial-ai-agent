@@ -34,7 +34,7 @@ def get_ssm_param(name: str, region: str) -> str:
 def get_auth_token(client_id: str, region: str) -> str:
     """Authenticates and returns AccessToken."""
     user = "analyst_user"
-    pw = os.environ.get("ANALYST_PASSWORD", "SecurePassword123!")
+    pw = os.environ.get("ANALYST_PASSWORD", "FinAIAgent2026@")
     client = boto3.client("cognito-idp", region_name=region)
     auth_resp = client.initiate_auth(
         ClientId=client_id,
@@ -71,7 +71,7 @@ def verify() -> None:
         f"/runtimes/{encoded_arn}/invocations"
     )
 
-    sid = "e9ab4997-f01b-41ca-abde-bfb7cf06c258"
+    sid = os.environ.get("E2E_SESSION_ID", str(__import__("uuid").uuid4()))
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -79,19 +79,22 @@ def verify() -> None:
         "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": sid,
     }
 
-    # Execute a test query to generate a trace
-    query = "What is the stock price for Amazon right now?"
-    print(f"\n📝 TEST QUERY: {query}")
-    try:
-        resp = requests.post(url, headers=headers, json={"prompt": query})
-        if resp.status_code == 200:
-            print("✅ Agent Invocation Successful.")
-        else:
-            print(f"❌ Invocation Failed {resp.status_code}: {resp.text}")
-            return
-    except Exception as error:
-        print(f"❌ Request failed: {error}")
-        return
+    # Execute required queries
+    queries = [
+        "What is the stock price for Amazon right now?",
+        "What is total amount of office space Amazon owned in NA in 2024?",
+    ]
+
+    for query in queries:
+        print(f"\n📝 QUERY: {query}")
+        try:
+            resp = requests.post(url, headers=headers, json={"prompt": query})
+            if resp.status_code == 200:
+                print("✅ Agent Invocation Successful.")
+            else:
+                print(f"❌ Invocation Failed {resp.status_code}: {resp.text}")
+        except Exception as error:
+            print(f"❌ Request failed: {error}")
 
     # 4. Fetch Trace from Langfuse using Keys from SSM
     print("\n🔍 RETRIEVING OBSERVABILITY TRACES FROM LANGFUSE...")
@@ -102,12 +105,25 @@ def verify() -> None:
         # Wait for trace propagation
         time.sleep(5)
 
-        trace_url = (
-            f"https://cloud.langfuse.com/api/public/traces?sessionId={sid}"
-        )
-        trace_resp = requests.get(trace_url, auth=(pk, sk))
+        if "placeholder" in pk.lower() or "placeholder" in sk.lower():
+            print(
+                "❌ Langfuse keys in SSM are placeholders; cannot fetch traces."
+            )
+            return
 
-        if trace_resp.status_code == 200:
+        trace_hosts = [
+            "https://us.cloud.langfuse.com",
+            "https://cloud.langfuse.com",
+            "https://eu.cloud.langfuse.com",
+        ]
+        trace_resp = None
+        for host in trace_hosts:
+            trace_url = f"{host}/api/public/traces?sessionId={sid}"
+            trace_resp = requests.get(trace_url, auth=(pk, sk), timeout=30)
+            if trace_resp.status_code == 200:
+                break
+
+        if trace_resp and trace_resp.status_code == 200:
             traces = trace_resp.json().get("data", [])
             if traces:
                 print("✅ Langfuse Traces Found:")
@@ -115,7 +131,8 @@ def verify() -> None:
             else:
                 print("⚠️ No traces found yet for this session.")
         else:
-            print(f"❌ Failed to fetch traces: {trace_resp.status_code}")
+            code = trace_resp.status_code if trace_resp else "N/A"
+            print(f"❌ Failed to fetch traces: {code}")
     except Exception as error:
         print(f"❌ Trace verification failed: {error}")
 

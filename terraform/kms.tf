@@ -109,7 +109,7 @@ resource "aws_kms_alias" "app_secrets_alias" {
 }
 
 resource "aws_ssm_parameter" "analyst_username" {
-  name   = "/financial-ai/auth/analyst-username"
+  name   = "/financial-ai/analyst-username"
   type   = "SecureString"
   value  = "placeholder-replace-me"
   key_id = aws_kms_key.app_secrets.arn
@@ -121,7 +121,7 @@ resource "aws_ssm_parameter" "analyst_username" {
 }
 
 resource "aws_ssm_parameter" "analyst_password" {
-  name   = "/financial-ai/auth/analyst-password"
+  name   = "/financial-ai/analyst-password"
   type   = "SecureString"
   value  = "placeholder-replace-me"
   key_id = aws_kms_key.app_secrets.arn
@@ -161,6 +161,9 @@ resource "aws_ssm_parameter" "langchain_api_key_personal" {
   type   = "SecureString"
   value  = "placeholder-replace-me"
   key_id = aws_kms_key.app_secrets.arn
+  lifecycle {
+    ignore_changes = [value]
+  }
   tags = {
     Project     = "FinancialAIAgent"
     Environment = "Development"
@@ -173,6 +176,9 @@ resource "aws_ssm_parameter" "langchain_api_key_service" {
   type   = "SecureString"
   value  = "placeholder-replace-me"
   key_id = aws_kms_key.app_secrets.arn
+  lifecycle {
+    ignore_changes = [value]
+  }
   tags = {
     Project     = "FinancialAIAgent"
     Environment = "Development"

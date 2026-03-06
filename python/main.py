@@ -2,15 +2,16 @@
 This module serves the FastAPI application for the Financial AI Agent.
 """
 
+print("--- CONTAINER STARTING ---")
 import json
 import logging
 import sys
 import uuid
 
-from agent import agent_graph
+from agent import get_agent_graph
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
-from langfuse.callback import CallbackHandler
+from langfuse.langchain import CallbackHandler
 
 # Configure logging to stdout
 logging.basicConfig(
@@ -40,7 +41,9 @@ async def invoke_agent(request: Request):
         query = payload.get("prompt")
         logger.info("Query: %s", query)
 
-        langfuse_handler = CallbackHandler(session_id=session_id)
+        langfuse_handler = CallbackHandler(
+            trace_context={"trace_id": session_id}
+        )
 
         agent_input = {"messages": [("user", query)]}
         config = {
@@ -51,14 +54,16 @@ async def invoke_agent(request: Request):
 
         async def stream_generator():
             try:
-                async for chunk in agent_graph.astream(
-                    agent_input, config=config, stream_mode="messages"
-                ):
-                    message_chunk, _ = chunk
-                    if message_chunk.content:
-                        chunk_data = {"event": message_chunk.content}
+                result = await get_agent_graph().ainvoke(
+                    agent_input, config=config
+                )
+                messages = result.get("messages", [])
+                for msg in reversed(messages):
+                    content = getattr(msg, "content", None)
+                    if content and getattr(msg, "type", None) == "ai":
+                        chunk_data = {"event": content}
                         yield f"data: {json.dumps(chunk_data)}\n\n"
-                langfuse_handler.flush()
+                        break
             except Exception as e:
                 logger.error("Streaming error: %s", str(e))
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
