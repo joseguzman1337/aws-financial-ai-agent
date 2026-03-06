@@ -5,11 +5,10 @@ This module serves the FastAPI application for the Financial AI Agent.
 import json
 import uuid
 
+from agent import agent_graph
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from langfuse.callback import CallbackHandler
-
-from agent import agent_graph
 
 app = FastAPI()
 

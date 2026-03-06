@@ -4,7 +4,6 @@ This module configures the ReAct agent using LangGraph and OpenAI.
 
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
-
 from tools import (
     retrieve_historical_stock_price,
     retrieve_knowledge_base_docs,

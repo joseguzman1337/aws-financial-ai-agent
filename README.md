@@ -95,7 +95,7 @@ A production-ready, serverless financial AI agent built with **FastAPI**, **Lang
 4. **Ingest Knowledge Base Data:**
    ```bash
    # Run the script from root
-   python ingest_kb.py
+   python python/ingest_kb.py
    ```
 </details>
 
