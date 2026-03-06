@@ -4,6 +4,7 @@ This ensures the PDFs uploaded to S3 are processed and available for the agent.
 """
 
 import logging
+import os
 import sys
 
 import boto3
@@ -34,15 +35,15 @@ def ingest_knowledge_base(kb_id: str, ds_id: str, region: str = "us-east-1"):
 
 
 if __name__ == "__main__":
-    # Note: Replace these with actual outputs from terraform apply
-    # e.g. terraform output kb_id
-    # Since we didn't define outputs yet, user needs to manually set these.
-    KB_ID = "YOUR_KNOWLEDGE_BASE_ID"
-    DS_ID = "YOUR_DATA_SOURCE_ID"
+    # Note: Use environment variables or manual assignment
+    # These can be retrieved via 'terraform output'
+    KB_ID = os.environ.get("KB_ID", "YOUR_KNOWLEDGE_BASE_ID")
+    DS_ID = os.environ.get("DS_ID", "YOUR_DATA_SOURCE_ID")
 
-    if KB_ID == "YOUR_KNOWLEDGE_BASE_ID":
-        logger.warning(
-            "Please replace KB_ID and DS_ID with the actual resource IDs."
+    if "YOUR_" in KB_ID or "YOUR_" in DS_ID:
+        logger.error(
+            "Please set KB_ID and DS_ID env vars or edit the script "
+            "with IDs from 'terraform output'."
         )
         sys.exit(1)
 

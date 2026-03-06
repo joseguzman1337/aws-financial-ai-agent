@@ -91,6 +91,9 @@ A production-ready, serverless financial AI agent built with **FastAPI**, **Lang
    cd terraform
    terraform init
    terraform apply -auto-approve
+
+   # Retrieve the IDs needed for the Notebook and Ingestion script
+   terraform output
    ```
 4. **Ingest Knowledge Base Data:**
    ```bash
