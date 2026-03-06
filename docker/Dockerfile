@@ -13,7 +13,9 @@ RUN useradd -m appuser
 USER appuser
 
 # Copy application code from python directory
-COPY python/agent.py python/main.py python/tools.py .
+COPY python/agent.py ./
+COPY python/main.py ./
+COPY python/tools.py ./
 
 # Expose port 8080
 EXPOSE 8080

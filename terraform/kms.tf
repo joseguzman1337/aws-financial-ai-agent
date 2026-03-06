@@ -1,13 +1,3 @@
-resource "aws_accessanalyzer_analyzer" "financial_agent_analyzer" {
-  analyzer_name = "financial-agent-analyzer"
-  type          = "ACCOUNT"
-  tags = {
-    Project     = "FinancialAIAgent"
-    Environment = "Development"
-    ManagedBy   = "Terraform"
-  }
-}
-
 resource "aws_kms_key" "app_secrets" {
   description             = "KMS key used to encrypt sensitive application secrets"
   deletion_window_in_days = 7

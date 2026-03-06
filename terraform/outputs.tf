@@ -5,17 +5,7 @@ output "cognito_client_id" {
 
 output "agent_runtime_arn" {
   description = "The ARN of the Bedrock AgentCore Runtime. Use this to construct the invocation URL."
-  value       = aws_bedrockagentcore_agent_runtime.financial_agent_runtime.arn
-}
-
-output "knowledge_base_id" {
-  description = "The ID of the Bedrock Knowledge Base."
-  value       = aws_bedrockagent_knowledge_base.financial_kb.id
-}
-
-output "data_source_id" {
-  description = "The ID of the Bedrock Data Source."
-  value       = aws_bedrockagent_data_source.financial_ds.id
+  value       = aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn
 }
 
 output "s3_bucket_name" {
