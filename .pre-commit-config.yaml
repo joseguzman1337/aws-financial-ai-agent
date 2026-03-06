@@ -1,0 +1,95 @@
+exclude: ^(node_modules/|\.mypy_cache/|\.terraform/|\.docker-colima/|\.docker/|package-lock\.json)
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: black
+        name: black
+        entry: black -l 79
+        language: system
+        types: [python]
+
+      - id: isort
+        name: isort
+        entry: isort
+        language: system
+        types: [python]
+
+      - id: ruff
+        name: ruff
+        entry: ruff check --fix
+        language: system
+        types: [python]
+
+      - id: flake8
+        name: flake8
+        entry: flake8 --max-line-length=79
+        language: system
+        types: [python]
+
+      - id: pylint
+        name: pylint
+        entry: pylint --disable=import-error,broad-exception-caught
+        language: system
+        types: [python]
+
+      - id: mypy
+        name: mypy
+        entry: mypy --ignore-missing-imports
+        language: system
+        types: [python]
+
+      - id: checkov
+        name: checkov
+        entry: checkov -d . --quiet --skip-path node_modules,.mypy_cache,.terraform,.docker-colima,.docker
+        language: system
+        pass_filenames: false
+
+      - id: tflint
+        name: tflint
+        entry: tflint
+        language: system
+        pass_filenames: false
+
+      - id: terrascan
+        name: terrascan
+        entry: terrascan scan -i terraform -f main.tf -f kms.tf -f provider.tf
+        language: system
+        pass_filenames: false
+
+      - id: kics
+        name: kics
+        entry: kics scan -p main.tf,kms.tf,provider.tf,Dockerfile --queries-path /opt/homebrew/opt/kics/share/kics/assets/queries --no-progress --type terraform,dockerfile --fail-on HIGH,CRITICAL
+        language: system
+        pass_filenames: false
+
+      - id: trivy
+        name: trivy
+        entry: trivy fs . --quiet --skip-dirs node_modules,.mypy_cache,.terraform,.docker-colima,.docker
+        language: system
+        pass_filenames: false
+
+      - id: grype
+        name: grype
+        entry: grype dir:. --quiet --exclude "./node_modules/**" --exclude "./.mypy_cache/**" --exclude "./.terraform/**" --exclude "./.docker-colima/**" --exclude "./.docker/**"
+        language: system
+        pass_filenames: false
+
+      - id: snyk
+        name: snyk
+        entry: snyk test
+        language: system
+        pass_filenames: false
+
+      - id: infracost
+        name: infracost
+        entry: infracost breakdown --path .
+        language: system
+        pass_filenames: false

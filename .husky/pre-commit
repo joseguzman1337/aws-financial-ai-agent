@@ -1,0 +1,27 @@
+#!/bin/sh
+export INFRACOST_API_KEY="ico-7MzaBsXdhbOIS6ZIVjlRU6RIIcTLKW0m"
+export SNYK_TOKEN="3d662e89-553c-465f-8d0a-bca496c32ead"
+PY="/opt/anaconda3/envs/x/bin/python"
+
+echo "Running pre-commit hooks individually..."
+
+pre-commit run trailing-whitespace --all-files
+pre-commit run end-of-file-fixer --all-files
+pre-commit run check-yaml --all-files
+pre-commit run check-added-large-files --all-files
+
+$PY -m black -l 79 .
+$PY -m isort .
+$PY -m ruff check --fix .
+$PY -m flake8 --max-line-length=79 .
+$PY -m pylint --disable=import-error,broad-exception-caught .
+$PY -m mypy --ignore-missing-imports .
+
+pre-commit run checkov --all-files
+pre-commit run tflint --all-files
+pre-commit run terrascan --all-files
+pre-commit run kics --all-files
+pre-commit run trivy --all-files
+pre-commit run grype --all-files
+pre-commit run snyk --all-files
+pre-commit run infracost --all-files

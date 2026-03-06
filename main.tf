@@ -1,10 +1,23 @@
 variable "region" {
-  default = "us-east-1"
+  type        = string
+  description = "The AWS region to deploy resources into."
+  default     = "us-east-1"
 }
 
 # 1. Cognito User Pool for Inbound Authorization
 resource "aws_cognito_user_pool" "financial_agent_pool" {
   name = "FinancialAgentUserPool"
+
+  mfa_configuration = "OPTIONAL" # Added to resolve LOW finding
+  software_token_mfa_configuration {
+    enabled = true
+  }
+
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
 }
 
 resource "aws_cognito_user_pool_client" "financial_agent_client" {
@@ -22,14 +35,92 @@ resource "random_string" "suffix" {
 }
 
 # 2. Bedrock Knowledge Base (S3 bucket, free tier eligible)
+resource "aws_s3_bucket" "financial_docs_logging" {
+  bucket = "amazon-financial-docs-logs-${random_string.suffix.result}"
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+  }
+
+
 resource "aws_s3_bucket" "financial_docs" {
   bucket = "amazon-financial-docs-kb-${random_string.suffix.result}"
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+  }
+
+
+resource "aws_s3_bucket_logging" "financial_docs_logging" {
+  bucket = aws_s3_bucket.financial_docs.id
+
+  target_bucket = aws_s3_bucket.financial_docs_logging.id
+  target_prefix = "log/"
+}
+
+resource "aws_s3_bucket_versioning" "financial_docs_logging_versioning" {
+  bucket = aws_s3_bucket.financial_docs_logging.id
+  versioning_configuration {
+    status = "Enabled"
+    # MFA Delete must be enabled via CLI as it is not supported by Terraform directly
+    # mfa_delete = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "financial_docs_versioning" {
+  bucket = aws_s3_bucket.financial_docs.id
+  versioning_configuration {
+    status = "Enabled"
+    # MFA Delete must be enabled via CLI as it is not supported by Terraform directly
+    # mfa_delete = "Enabled"
+  }
 }
 
 # Basic configuration to hold the agent image
 resource "aws_ecr_repository" "agent_repo" {
-  name = "financial-agent-repo"
-  # ECR Free tier gives 500MB/month free.
+  name                 = "financial-agent-repo"
+  image_tag_mutability = "IMMUTABLE"
+  force_delete         = true
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.app_secrets.arn
+  }
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_ecr_repository_policy" "agent_repo_policy" {
+  repository = aws_ecr_repository.agent_repo.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowAgentPull"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.agentcore_execution_role.arn
+        }
+        Action = [
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer"
+        ]
+      }
+    ]
+  })
 }
 
 resource "aws_iam_role" "agentcore_execution_role" {
@@ -41,12 +132,77 @@ resource "aws_iam_role" "agentcore_execution_role" {
         Action = "sts:AssumeRole"
         Effect = "Allow"
         Principal = {
-          Service = "bedrock.amazonaws.com"
+          Service = "bedrock-agentcore.amazonaws.com"
         }
       }
     ]
   })
+
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
 }
+
+
+resource "aws_iam_role_policy" "agentcore_execution_policy" {
+  name = "agentcore_execution_policy"
+  role = aws_iam_role.agentcore_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowECRPull"
+        Action = [
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer"
+        ]
+        Effect   = "Allow"
+        Resource = aws_ecr_repository.agent_repo.arn
+      },
+      {
+        Sid    = "AllowBedrockInvoke"
+        Action = [
+          "bedrock:InvokeModel"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:aws:bedrock:${var.region}::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0"
+      },
+      {
+        Sid    = "AllowS3Access"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Effect   = "Allow"
+        Resource = [
+          aws_s3_bucket.financial_docs.arn,
+          "${aws_s3_bucket.financial_docs.arn}/*"
+        ]
+      },
+      {
+        Sid    = "AllowSSMRead"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/*"
+      },
+      {
+        Sid    = "AllowKMSDecrypt"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Effect   = "Allow"
+        Resource = aws_kms_key.app_secrets.arn
+      }
+    ]
+  })
+}
+
 
 # 3. Agentcore Runtime (from task1.txt)
 resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
@@ -59,6 +215,7 @@ resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
     }
   }
 
+
   network_configuration {
     network_mode = "PUBLIC" # Public to utilize Free Tier as much as possible, avoiding VPC peering costs
   }
@@ -69,5 +226,11 @@ resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
       discovery_url   = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.financial_agent_pool.id}/.well-known/openid-configuration"
       allowed_clients = [aws_cognito_user_pool_client.financial_agent_client.id]
     }
+  }
+
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
   }
 }

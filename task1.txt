@@ -30,17 +30,17 @@ resource "aws_s3_bucket" "financial_docs" {
 resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
   agent_runtime_name = "Financial_Analyst_Agent"
   role_arn           = aws_iam_role.agentcore_execution_role.arn
-  
+
   agent_runtime_artifact {
     container_configuration {
       container_uri = "${aws_ecr_repository.agent_repo.repository_url}:latest"
     }
   }
-  
+
   network_configuration {
     network_mode = "PUBLIC"
   }
-  
+
   # AgentCore allows defining a custom JWT authorizer pointing to the Cognito Discovery URL
   authorizer_configuration {
     custom_jwt_authorizer {
@@ -111,10 +111,10 @@ async def invoke_agent(request: Request):
 
     # Initialize Langfuse CallbackHandler for cloud observability
     langfuse_handler = CallbackHandler(session_id=session_id)
-    
+
     agent_input = {"messages": [("user", query)]}
     config = {
-        "callbacks": [langfuse_handler], 
+        "callbacks": [langfuse_handler],
         "metadata": {"langfuse_session_id": session_id},
         "recursion_limit": 25
     }
@@ -180,12 +180,12 @@ headers = {
 def query_financial_agent(prompt: str):
     print(f"\n--- Query: {prompt} ---")
     response = requests.post(
-        AGENTCORE_URL, 
-        headers=headers, 
-        json={"prompt": prompt}, 
+        AGENTCORE_URL,
+        headers=headers,
+        json={"prompt": prompt},
         stream=True
     )
-    
+
     # Process the Server-Sent Events (SSE) stream
     for line in response.iter_lines():
         if line:
