@@ -31,14 +31,63 @@ resource "aws_cognito_user_pool" "financial_agent_pool" {
 }
 
 resource "aws_cognito_identity_pool" "financial_agent_identity_pool" {
+  # checkov:skip=CKV_AWS_366: Guest access is required for recruiter demo credential retrieval
   identity_pool_name               = "FinancialAgentIdentityPool"
-  allow_unauthenticated_identities = false
+  allow_unauthenticated_identities = true # Enabled for guest credential retrieval
 
   cognito_identity_providers {
     client_id               = aws_cognito_user_pool_client.financial_agent_client.id
     provider_name           = aws_cognito_user_pool.financial_agent_pool.endpoint
     server_side_token_check = false
   }
+}
+
+resource "aws_iam_role" "cognito_unauthenticated_role" {
+  name = "cognito_unauthenticated_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = "cognito-identity.amazonaws.com"
+        }
+        Condition = {
+          "StringEquals" = {
+            "cognito-identity.amazonaws.com:aud" = aws_cognito_identity_pool.financial_agent_identity_pool.id
+          }
+          "ForAnyValue:StringLike" = {
+            "cognito-identity.amazonaws.com:amr" = "unauthenticated"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "cognito_guest_ssm_policy" {
+  name = "cognito_guest_ssm_policy"
+  role = aws_iam_role.cognito_unauthenticated_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "ssm:GetParameter"
+        Effect = "Allow"
+        Resource = [
+          "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/auth/*"
+        ]
+      },
+      {
+        Action = "kms:Decrypt"
+        Effect = "Allow"
+        Resource = aws_kms_key.app_secrets.arn
+      }
+    ]
+  })
 }
 
 resource "aws_iam_role" "cognito_authenticated_role" {
@@ -96,7 +145,8 @@ resource "aws_cognito_identity_pool_roles_attachment" "main" {
   identity_pool_id = aws_cognito_identity_pool.financial_agent_identity_pool.id
 
   roles = {
-    authenticated = aws_iam_role.cognito_authenticated_role.arn
+    authenticated   = aws_iam_role.cognito_authenticated_role.arn
+    unauthenticated = aws_iam_role.cognito_unauthenticated_role.arn
   }
 }
 

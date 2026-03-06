@@ -72,6 +72,26 @@ resource "aws_kms_key" "app_secrets" {
           "kms:DescribeKey"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.us-east-1.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey*"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:us-east-1:162187491349:log-group:*"
+          }
+        }
       }
     ]
   })
@@ -86,6 +106,30 @@ resource "aws_kms_key" "app_secrets" {
 resource "aws_kms_alias" "app_secrets_alias" {
   name          = "alias/financial-ai-agent-secrets"
   target_key_id = aws_kms_key.app_secrets.key_id
+}
+
+resource "aws_ssm_parameter" "analyst_username" {
+  name   = "/financial-ai/auth/analyst-username"
+  type   = "SecureString"
+  value  = "placeholder-replace-me"
+  key_id = aws_kms_key.app_secrets.arn
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_ssm_parameter" "analyst_password" {
+  name   = "/financial-ai/auth/analyst-password"
+  type   = "SecureString"
+  value  = "placeholder-replace-me"
+  key_id = aws_kms_key.app_secrets.arn
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
 }
 
 resource "aws_ssm_parameter" "langfuse_public_key" {
