@@ -10,6 +10,7 @@ echo "Running pre-commit hooks on modified files..."
 pre-commit run trailing-whitespace
 pre-commit run end-of-file-fixer
 pre-commit run check-yaml
+pre-commit run check-json
 pre-commit run check-added-large-files
 pre-commit run black
 pre-commit run isort
