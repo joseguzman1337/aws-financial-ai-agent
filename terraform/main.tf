@@ -207,7 +207,7 @@ resource "aws_s3_bucket" "financial_docs_logging" {
     Environment = "Development"
     ManagedBy   = "Terraform"
   }
-  }
+}
 
 
 resource "aws_s3_bucket" "financial_docs" {
@@ -217,7 +217,7 @@ resource "aws_s3_bucket" "financial_docs" {
     Environment = "Development"
     ManagedBy   = "Terraform"
   }
-  }
+}
 
 
 resource "aws_s3_bucket_logging" "financial_docs_logging" {
@@ -338,7 +338,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "AllowECRAuth"
+        Sid = "AllowECRAuth"
         Action = [
           "ecr:GetAuthorizationToken"
         ]
@@ -346,7 +346,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         Resource = "*"
       },
       {
-        Sid    = "AllowECRPull"
+        Sid = "AllowECRPull"
         Action = [
           "ecr:BatchGetImage",
           "ecr:GetDownloadUrlForLayer"
@@ -355,7 +355,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         Resource = aws_ecr_repository.agent_repo.arn
       },
       {
-        Sid    = "AllowBedrockInvoke"
+        Sid = "AllowBedrockInvoke"
         Action = [
           "bedrock:InvokeModel",
           "bedrock:InvokeModelWithResponseStream",
@@ -363,7 +363,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
           "bedrock:ConverseStream",
           "bedrock:Retrieve"
         ]
-        Effect   = "Allow"
+        Effect = "Allow"
         Resource = [
           "arn:aws:bedrock:*::foundation-model/*",
           "arn:aws:bedrock:${var.region}:162187491349:inference-profile/*",
@@ -371,7 +371,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         ]
       },
       {
-        Sid    = "AllowS3Access"
+        Sid = "AllowS3Access"
         Action = [
           "s3:GetObject",
           "s3:ListBucket"
@@ -383,7 +383,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         ]
       },
       {
-        Sid    = "AllowSSMRead"
+        Sid = "AllowSSMRead"
         Action = [
           "ssm:GetParameter",
           "ssm:GetParameters"
@@ -392,7 +392,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         Resource = "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/*"
       },
       {
-        Sid    = "AllowKMSDecrypt"
+        Sid = "AllowKMSDecrypt"
         Action = [
           "kms:Decrypt"
         ]
@@ -400,7 +400,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         Resource = aws_kms_key.app_secrets.arn
       },
       {
-        Sid    = "AllowLogging"
+        Sid = "AllowLogging"
         Action = [
           "logs:CreateLogStream",
           "logs:PutLogEvents",
@@ -417,7 +417,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         ]
       },
       {
-        Sid    = "AllowMarketplace"
+        Sid = "AllowMarketplace"
         Action = [
           "aws-marketplace:ViewSubscriptions",
           "aws-marketplace:Subscribe"
@@ -426,7 +426,7 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         Resource = "*"
       },
       {
-        Sid    = "AllowAgentCore"
+        Sid = "AllowAgentCore"
         Action = [
           "bedrock-agentcore:*"
         ]
@@ -456,7 +456,7 @@ resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
 
   agent_runtime_artifact {
     container_configuration {
-      container_uri = "${aws_ecr_repository.agent_repo.repository_url}:v2"
+      container_uri = "${aws_ecr_repository.agent_repo.repository_url}:v8"
     }
   }
 
@@ -465,13 +465,7 @@ resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
     network_mode = "PUBLIC" # Public to utilize Free Tier as much as possible, avoiding VPC peering costs
   }
 
-  # Custom JWT authorizer pointing to the Cognito Discovery URL
-  authorizer_configuration {
-    custom_jwt_authorizer {
-      discovery_url   = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.financial_agent_pool.id}/.well-known/openid-configuration"
-      allowed_clients = [aws_cognito_user_pool_client.financial_agent_client.id]
-    }
-  }
+  # No explicit authorizer configuration: use AWS SigV4/IAM authorization.
 
   tags = {
     Project     = "FinancialAIAgent"

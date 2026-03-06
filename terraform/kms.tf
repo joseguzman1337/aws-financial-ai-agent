@@ -137,6 +137,9 @@ resource "aws_ssm_parameter" "langfuse_public_key" {
   type   = "SecureString"
   value  = "placeholder-replace-me"
   key_id = aws_kms_key.app_secrets.arn
+  lifecycle {
+    ignore_changes = [value]
+  }
   tags = {
     Project     = "FinancialAIAgent"
     Environment = "Development"
@@ -149,6 +152,24 @@ resource "aws_ssm_parameter" "langfuse_secret_key" {
   type   = "SecureString"
   value  = "placeholder-replace-me"
   key_id = aws_kms_key.app_secrets.arn
+  lifecycle {
+    ignore_changes = [value]
+  }
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_ssm_parameter" "langfuse_base_url" {
+  name   = "/financial-ai/langfuse/base-url"
+  type   = "SecureString"
+  value  = "https://us.cloud.langfuse.com"
+  key_id = aws_kms_key.app_secrets.arn
+  lifecycle {
+    ignore_changes = [value]
+  }
   tags = {
     Project     = "FinancialAIAgent"
     Environment = "Development"

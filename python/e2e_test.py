@@ -100,17 +100,28 @@ def run_e2e_test():
     sk = ssm_auth.get_parameter(
         Name="/financial-ai/langfuse/secret-key", WithDecryption=True
     )["Parameter"]["Value"]
+    try:
+        base_url = ssm_auth.get_parameter(
+            Name="/financial-ai/langfuse/base-url", WithDecryption=True
+        )["Parameter"]["Value"].rstrip("/")
+    except Exception:
+        base_url = ""
 
     if "placeholder" in pk.lower() or "placeholder" in sk.lower():
         print("❌ Langfuse keys in SSM are placeholders; cannot fetch traces.")
         return
 
     trace_resp = None
-    for host in [
-        "https://us.cloud.langfuse.com",
-        "https://cloud.langfuse.com",
-        "https://eu.cloud.langfuse.com",
-    ]:
+    hosts = (
+        [base_url]
+        if base_url
+        else [
+            "https://us.cloud.langfuse.com",
+            "https://cloud.langfuse.com",
+            "https://eu.cloud.langfuse.com",
+        ]
+    )
+    for host in hosts:
         trace_resp = requests.get(
             f"{host}/api/public/traces?sessionId={session_id}",
             auth=(pk, sk),

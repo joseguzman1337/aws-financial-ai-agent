@@ -82,9 +82,8 @@ A production-ready, serverless financial AI agent built with **FastAPI**, **Lang
 2. **Build & Push Image:**
    ```bash
    colima start --arch aarch64
-   # Build from root using docker/Dockerfile
-   docker build -t <ECR_URI>:latest -f docker/Dockerfile .
-   docker push <ECR_URI>:latest
+   # BuildKit/buildx (avoids legacy builder deprecation warning)
+   ./scripts/buildx_push.sh <ECR_URI> latest
    ```
 3. **Deploy Infrastructure:**
    ```bash

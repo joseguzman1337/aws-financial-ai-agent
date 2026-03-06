@@ -12,7 +12,8 @@ RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Copy application code from python directory with correct ownership
-COPY --chown=appuser:appuser python/agent.py python/main.py python/tools.py ./
+COPY --chown=appuser:appuser python/agent.py python/main.py python/tools.py python/langfuse_config.py ./
+COPY --chown=appuser:appuser terraform/docs /app/docs
 
 # Expose port 8080
 EXPOSE 8080

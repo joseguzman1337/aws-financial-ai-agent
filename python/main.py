@@ -11,6 +11,8 @@ import uuid
 from agent import get_agent_graph
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
+from langfuse import get_client
+from langfuse_config import ensure_langfuse_env
 from langfuse.langchain import CallbackHandler
 
 # Configure logging to stdout
@@ -24,6 +26,16 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 
 logger.info("FastAPI application initialized.")
+
+
+@app.on_event("shutdown")
+async def flush_langfuse():
+    """Flush Langfuse events on graceful shutdown."""
+    if ensure_langfuse_env():
+        try:
+            get_client().flush()
+        except Exception as error:  # pragma: no cover
+            logger.warning("Langfuse flush failed: %s", str(error))
 
 
 @app.post("/invocations")
@@ -41,22 +53,47 @@ async def invoke_agent(request: Request):
         query = payload.get("prompt")
         logger.info("Query: %s", query)
 
-        langfuse_handler = CallbackHandler(
-            trace_context={"trace_id": session_id}
-        )
+        langfuse_enabled = ensure_langfuse_env()
+        callbacks = []
+        if langfuse_enabled:
+            langfuse_handler = CallbackHandler(
+                trace_name="financial-ai-agent-invocation",
+                trace_context={"trace_id": session_id},
+            )
+            callbacks = [langfuse_handler]
+        else:
+            logger.warning(
+                "Langfuse keys unavailable; invocation will run without tracing."
+            )
 
         agent_input = {"messages": [("user", query)]}
         config = {
-            "callbacks": [langfuse_handler],
-            "metadata": {"langfuse_session_id": session_id},
+            "callbacks": callbacks,
+            "metadata": {
+                "langfuse_session_id": session_id,
+                "agent_runtime": "Financial_Analyst_Agent",
+                "has_prompt": bool(query),
+            },
             "recursion_limit": 25,
         }
 
         async def stream_generator():
             try:
-                result = await get_agent_graph().ainvoke(
-                    agent_input, config=config
-                )
+                langfuse = get_client() if langfuse_enabled else None
+                if langfuse:
+                    with langfuse.start_as_current_observation(
+                        as_type="span",
+                        name="agentcore-invocation",
+                        input={"session_id": session_id, "prompt": query},
+                    ) as span:
+                        result = await get_agent_graph().ainvoke(
+                            agent_input, config=config
+                        )
+                        span.update(output={"status": "ok"})
+                else:
+                    result = await get_agent_graph().ainvoke(
+                        agent_input, config=config
+                    )
                 messages = result.get("messages", [])
                 for msg in reversed(messages):
                     content = getattr(msg, "content", None)
