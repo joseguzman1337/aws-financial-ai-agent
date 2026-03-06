@@ -112,4 +112,52 @@ bash .husky/pre-commit
 
 ---
 
+## 📖 Requirements Traceability (Proof of Work)
+
+<details>
+<summary><b>1. AWS Cloud Services (Minimum Requirements)</b></summary>
+
+- **AWS Agentcore:** Fully provisioned via `aws_bedrockagentcore_agent_runtime` in `terraform/main.tf`.
+- **AWS Cognito:** Implemented `aws_cognito_user_pool` for secure inbound authorization.
+</details>
+
+<details>
+<summary><b>2. Backend Implementation (Python/FastAPI)</b></summary>
+
+- **FastAPI Hosting:** `python/main.py` serves the Agentcore `/invocations` and `/ping` contract.
+- **LangGraph Orchestration:** `python/agent.py` implements a ReAct-type agent using `create_react_agent`.
+- **Event Streaming:** Implemented using `.astream()` with `StreamingResponse(media_type="text/event-stream")`.
+- **Observability:** Integrated **Langfuse Cloud** via `CallbackHandler` in `python/main.py`.
+</details>
+
+<details>
+<summary><b>3. Financial Tools & Knowledge Base</b></summary>
+
+- **yfinance Integration:** Two native tools implemented in `python/tools.py`:
+  - `retrieve_realtime_stock_price`
+  - `retrieve_historical_stock_price`
+- **RAG Knowledge Base:**
+  - Deployed `aws_bedrockagent_knowledge_base` using **Titan Text Embeddings**.
+  - Ingested 3 required Amazon PDFs: **2024 Annual Report**, **Q2 2025**, and **Q3 2025 Earnings Releases**.
+  - Tool `retrieve_knowledge_base_docs` provided for agent retrieval.
+</details>
+
+<details>
+<summary><b>4. User Acceptance Criteria (Jupyter Notebook)</b></summary>
+
+The `invocation_demo.ipynb` provides end-to-end proof:
+- **Cognito Auth:** Demonstrates acquiring a JWT token via `client.initiate_auth`.
+- **Endpoint Invocation:** Calls the live Agentcore URL with the `Authorization` header.
+- **Streaming Verification:** Processes SSE (Server-Sent Events) in real-time.
+- **Required Queries Answered:**
+  - Real-time stock price for Amazon.
+  - Q4 2024 historical OHLC data.
+  - Earnings vs. Analyst predictions comparison.
+  - AMZN AI business research (Trainium2/Rufus).
+  - 2024 North America office space (9.2M sq ft).
+- **Observability Proof:** Includes API responses for **Langfuse Traces**.
+</details>
+
+---
+
 **Policy:** This repository adheres to a 100% strict formatting and security policy (No skips permitted).
