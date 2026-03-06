@@ -36,3 +36,31 @@ variable "langfuse_secret_key" {
   type        = string
   sensitive   = true
 }
+
+resource "aws_ssm_parameter" "langchain_api_key_personal" {
+  name        = "/financial-ai/langchain/personal-key"
+  description = "LangChain Personal API Key"
+  type        = "SecureString"
+  value       = var.langchain_api_key_personal
+  key_id      = aws_kms_key.app_secrets.arn
+}
+
+resource "aws_ssm_parameter" "langchain_api_key_service" {
+  name        = "/financial-ai/langchain/service-key"
+  description = "LangChain Service API Key"
+  type        = "SecureString"
+  value       = var.langchain_api_key_service
+  key_id      = aws_kms_key.app_secrets.arn
+}
+
+variable "langchain_api_key_personal" {
+  description = "LangChain Personal API Key"
+  type        = string
+  sensitive   = true
+}
+
+variable "langchain_api_key_service" {
+  description = "LangChain Service API Key"
+  type        = string
+  sensitive   = true
+}
