@@ -3,7 +3,8 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # Upgrade pip and install dependencies
-COPY requirements.txt .
+# We assume the build context is the repository root
+COPY docker/requirements.txt .
 RUN pip install --no-cache-dir pip==26.0.1 && \
     pip install --no-cache-dir -r requirements.txt
 
@@ -11,8 +12,8 @@ RUN pip install --no-cache-dir pip==26.0.1 && \
 RUN useradd -m appuser
 USER appuser
 
-# Copy application code
-COPY . .
+# Copy application code from root
+COPY agent.py main.py tools.py .
 
 # Expose port 8080
 EXPOSE 8080

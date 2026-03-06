@@ -55,19 +55,19 @@ repos:
 
       - id: tflint
         name: tflint
-        entry: tflint
+        entry: tflint --chdir terraform
         language: system
         pass_filenames: false
 
       - id: terrascan
         name: terrascan
-        entry: terrascan scan -i terraform -f main.tf -f kms.tf -f provider.tf
+        entry: terrascan scan -i terraform -f terraform/main.tf -f terraform/kms.tf -f terraform/provider.tf
         language: system
         pass_filenames: false
 
       - id: kics
         name: kics
-        entry: kics scan -p main.tf,kms.tf,provider.tf,Dockerfile --queries-path /opt/homebrew/opt/kics/share/kics/assets/queries --no-progress --type terraform,dockerfile --fail-on HIGH,CRITICAL
+        entry: kics scan -p terraform/main.tf,terraform/kms.tf,terraform/provider.tf,docker/Dockerfile --queries-path /opt/homebrew/opt/kics/share/kics/assets/queries --no-progress --type terraform,dockerfile --fail-on HIGH,CRITICAL
         language: system
         pass_filenames: false
 
@@ -91,6 +91,6 @@ repos:
 
       - id: infracost
         name: infracost
-        entry: infracost breakdown --path .
+        entry: infracost breakdown --path terraform/
         language: system
         pass_filenames: false

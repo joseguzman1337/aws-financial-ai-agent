@@ -82,15 +82,19 @@ A production-ready, serverless financial AI agent built with **FastAPI**, **Lang
 2. **Build & Push Image:**
    ```bash
    colima start --arch aarch64
-   # Build/Push scripts are automated via session history commands
+   # Build from root using docker/Dockerfile
+   docker build -t <ECR_URI>:latest -f docker/Dockerfile .
+   docker push <ECR_URI>:latest
    ```
 3. **Deploy Infrastructure:**
    ```bash
+   cd terraform
+   terraform init
    terraform apply -auto-approve
    ```
 4. **Ingest Knowledge Base Data:**
    ```bash
-   # Run the script to start the Bedrock KB ingestion job for the 3 PDFs in docs/
+   # Run the script from root
    python ingest_kb.py
    ```
 </details>
