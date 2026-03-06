@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -11,13 +11,13 @@ RUN pip install --no-cache-dir pip==26.0.1 && \
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Copy application code with correct ownership
+# Copy application code from python directory with correct ownership
 COPY --chown=appuser:appuser python/agent.py python/main.py python/tools.py ./
 
 # Expose port 8080
 EXPOSE 8080
 
-# Healthcheck with increased grace period for cold starts
+# Healthcheck with increased grace period for Python 3.13 cold starts
 HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=5 \
   CMD python3 -c "import urllib.request; import sys; try: urllib.request.urlopen('http://localhost:8080/ping', timeout=10); sys.exit(0); except Exception: sys.exit(1)"
 

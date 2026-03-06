@@ -71,7 +71,7 @@ def verify() -> None:
         f"/runtimes/{encoded_arn}/invocations"
     )
 
-    sid = "terraform-automated-verification-final-2026"
+    sid = "e9ab4997-f01b-41ca-abde-bfb7cf06c258"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",

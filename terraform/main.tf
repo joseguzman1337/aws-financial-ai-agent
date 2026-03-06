@@ -79,16 +79,17 @@ resource "aws_iam_role_policy" "cognito_guest_ssm_policy" {
           "ssm:GetParameter",
           "ssm:GetParameters"
         ]
-        Effect   = "Allow"
+        Effect = "Allow"
         Resource = [
-          "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/auth/*"
+          "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/auth/analyst-username",
+          "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/auth/analyst-password"
         ]
       },
       {
         Action = [
           "kms:Decrypt"
         ]
-        Effect   = "Allow"
+        Effect = "Allow"
         Resource = [
           aws_kms_key.app_secrets.arn
         ]
@@ -393,10 +394,20 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         Sid    = "AllowLogging"
         Action = [
           "logs:CreateLogStream",
-          "logs:PutLogEvents"
+          "logs:PutLogEvents",
+          "logs:CreateLogGroup",
+          "logs:DescribeLogStreams"
         ]
         Effect   = "Allow"
-        Resource = "${aws_cloudwatch_log_group.agent_logs.arn}:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowAgentCore"
+        Action = [
+          "bedrock-agentcore:*"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
       }
     ]
   })

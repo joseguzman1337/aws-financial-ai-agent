@@ -2,7 +2,7 @@
 This module configures the ReAct agent using LangGraph and OpenAI.
 """
 
-from langchain_openai import ChatOpenAI
+from langchain_aws import ChatBedrock
 from langgraph.prebuilt import create_react_agent
 from tools import (
     retrieve_historical_stock_price,
@@ -10,9 +10,13 @@ from tools import (
     retrieve_realtime_stock_price,
 )
 
-# Use a smaller/freer model for testing if possible.
-# Using gpt-4o-mini to reduce costs for tests.
-model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+# Using ChatBedrock to utilize AWS Bedrock models as requested by task1.txt
+model = ChatBedrock(
+    model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
+    model_kwargs={"temperature": 0},
+    region_name="us-east-1",
+)
+
 tools = [
     retrieve_realtime_stock_price,
     retrieve_historical_stock_price,
