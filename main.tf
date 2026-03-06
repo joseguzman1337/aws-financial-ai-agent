@@ -165,10 +165,11 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
       {
         Sid    = "AllowBedrockInvoke"
         Action = [
-          "bedrock:InvokeModel"
+          "bedrock:InvokeModel",
+          "bedrock:Retrieve"
         ]
         Effect   = "Allow"
-        Resource = "arn:aws:bedrock:${var.region}::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0"
+        Resource = "*"
       },
       {
         Sid    = "AllowS3Access"
@@ -204,7 +205,52 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
 }
 
 
-# 3. Agentcore Runtime (from task1.txt)
+# 3. Bedrock Knowledge Base (from task1.txt)
+# Note: Full OpenSearch Serverless collection skipped as per task1.txt assumption note
+# This resource represents the KB definition itself.
+resource "aws_bedrockagent_knowledge_base" "financial_kb" {
+  name     = "AmazonFinancialDocsKB"
+  role_arn = aws_iam_role.agentcore_execution_role.arn
+
+  knowledge_base_configuration {
+    type = "VECTOR"
+    vector_knowledge_base_configuration {
+      embedding_model_arn = "arn:aws:bedrock:${var.region}::foundation-model/amazon.titan-embed-text-v1"
+    }
+  }
+
+  storage_configuration {
+    type = "OPENSEARCH_SERVERLESS"
+    opensearch_serverless_configuration {
+      collection_arn    = "arn:aws:managed:collection" # Placeholder
+      vector_index_name = "bedrock-knowledge-base-default-index"
+      field_mapping {
+        vector_field   = "bedrock-knowledge-base-default-vector"
+        text_field     = "AMAZON_BEDROCK_TEXT_CHUNK"
+        metadata_field = "AMAZON_BEDROCK_METADATA"
+      }
+    }
+  }
+
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_bedrockagent_data_source" "financial_ds" {
+  knowledge_base_id = aws_bedrockagent_knowledge_base.financial_kb.id
+  name              = "FinancialDocsDataSource"
+  data_source_configuration {
+    type = "S3"
+    s3_configuration {
+      bucket_arn = aws_s3_bucket.financial_docs.arn
+    }
+  }
+}
+
+# 4. Agentcore Runtime (from task1.txt)
 resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
   agent_runtime_name = "Financial_Analyst_Agent"
   role_arn           = aws_iam_role.agentcore_execution_role.arn

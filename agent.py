@@ -7,13 +7,18 @@ from langgraph.prebuilt import create_react_agent
 
 from tools import (
     retrieve_historical_stock_price,
+    retrieve_knowledge_base_docs,
     retrieve_realtime_stock_price,
 )
 
 # Use a smaller/freer model for testing if possible.
 # Using gpt-4o-mini to reduce costs for tests.
 model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-tools = [retrieve_realtime_stock_price, retrieve_historical_stock_price]
+tools = [
+    retrieve_realtime_stock_price,
+    retrieve_historical_stock_price,
+    retrieve_knowledge_base_docs,
+]
 
 # ReAct framework orchestrates the Reason + Act loop
 agent_graph = create_react_agent(model, tools=tools)
