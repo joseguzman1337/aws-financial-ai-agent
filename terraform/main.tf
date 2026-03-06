@@ -75,16 +75,23 @@ resource "aws_iam_role_policy" "cognito_guest_ssm_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Action = "ssm:GetParameter"
-        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ]
+        Effect   = "Allow"
         Resource = [
           "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/auth/*"
         ]
       },
       {
-        Action = "kms:Decrypt"
-        Effect = "Allow"
-        Resource = aws_kms_key.app_secrets.arn
+        Action = [
+          "kms:Decrypt"
+        ]
+        Effect   = "Allow"
+        Resource = [
+          aws_kms_key.app_secrets.arn
+        ]
       }
     ]
   })
