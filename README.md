@@ -88,6 +88,11 @@ A production-ready, serverless financial AI agent built with **FastAPI**, **Lang
    ```bash
    terraform apply -auto-approve
    ```
+4. **Ingest Knowledge Base Data:**
+   ```bash
+   # Run the script to start the Bedrock KB ingestion job for the 3 PDFs in docs/
+   python ingest_kb.py
+   ```
 </details>
 
 <details>

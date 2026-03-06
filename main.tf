@@ -80,6 +80,19 @@ resource "aws_s3_bucket_versioning" "financial_docs_versioning" {
   }
 }
 
+resource "aws_s3_object" "financial_docs_upload" {
+  for_each = fileset("${path.module}/docs", "*.pdf")
+  bucket   = aws_s3_bucket.financial_docs.id
+  key      = each.value
+  source   = "${path.module}/docs/${each.value}"
+  etag     = filemd5("${path.module}/docs/${each.value}")
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+}
+
 # Basic configuration to hold the agent image
 resource "aws_ecr_repository" "agent_repo" {
   name                 = "financial-agent-repo"
