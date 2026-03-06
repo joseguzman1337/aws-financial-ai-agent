@@ -3,6 +3,11 @@ output "cognito_client_id" {
   value       = aws_cognito_user_pool_client.financial_agent_client.id
 }
 
+output "identity_pool_id" {
+  description = "The ID of the Cognito Identity Pool."
+  value       = aws_cognito_identity_pool.financial_agent_identity_pool.id
+}
+
 output "agent_runtime_arn" {
   description = "The ARN of the Bedrock AgentCore Runtime. Use this to construct the invocation URL."
   value       = aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn

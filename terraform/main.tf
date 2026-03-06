@@ -30,6 +30,76 @@ resource "aws_cognito_user_pool" "financial_agent_pool" {
   }
 }
 
+resource "aws_cognito_identity_pool" "financial_agent_identity_pool" {
+  identity_pool_name               = "FinancialAgentIdentityPool"
+  allow_unauthenticated_identities = false
+
+  cognito_identity_providers {
+    client_id               = aws_cognito_user_pool_client.financial_agent_client.id
+    provider_name           = aws_cognito_user_pool.financial_agent_pool.endpoint
+    server_side_token_check = false
+  }
+}
+
+resource "aws_iam_role" "cognito_authenticated_role" {
+  name = "cognito_authenticated_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = "cognito-identity.amazonaws.com"
+        }
+        Condition = {
+          "StringEquals" = {
+            "cognito-identity.amazonaws.com:aud" = aws_cognito_identity_pool.financial_agent_identity_pool.id
+          }
+          "ForAnyValue:StringLike" = {
+            "cognito-identity.amazonaws.com:amr" = "authenticated"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "cognito_ssm_policy" {
+  name = "cognito_ssm_policy"
+  role = aws_iam_role.cognito_authenticated_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/langfuse/*"
+      },
+      {
+        Action = [
+          "kms:Decrypt"
+        ]
+        Effect   = "Allow"
+        Resource = aws_kms_key.app_secrets.arn
+      }
+    ]
+  })
+}
+
+resource "aws_cognito_identity_pool_roles_attachment" "main" {
+  identity_pool_id = aws_cognito_identity_pool.financial_agent_identity_pool.id
+
+  roles = {
+    authenticated = aws_iam_role.cognito_authenticated_role.arn
+  }
+}
+
 resource "aws_cognito_user_pool_client" "financial_agent_client" {
   name                = "FinancialAgentClient"
   user_pool_id        = aws_cognito_user_pool.financial_agent_pool.id
