@@ -12,6 +12,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: coderabbit-config-check
+        name: coderabbit-config-check
+        entry: bash -c "if [ ! -f .coderabbit.yaml ]; then exit 1; fi"
+        language: system
+        files: \.coderabbit\.yaml$
+
       - id: black
         name: black
         entry: black -l 79

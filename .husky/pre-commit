@@ -7,6 +7,12 @@ export SNYK_TOKEN="3d662e89-553c-465f-8d0a-bca496c32ead"
 
 echo "Running pre-commit hooks on modified files..."
 
+# Ensure CodeRabbit configuration is intact
+if [ ! -f .coderabbit.yaml ]; then
+    echo "❌ ERROR: .coderabbit.yaml is missing. CodeRabbit review is required."
+    exit 1
+fi
+
 pre-commit run trailing-whitespace
 pre-commit run end-of-file-fixer
 pre-commit run check-yaml
