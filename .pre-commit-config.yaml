@@ -49,39 +49,39 @@ repos:
 
       - id: checkov
         name: checkov
-        entry: checkov -d . --quiet --skip-path node_modules,.mypy_cache,.terraform,.docker-colima,.docker
+        entry: checkov --quiet
         language: system
-        pass_filenames: false
+        files: \.(tf|Dockerfile)$
 
       - id: tflint
         name: tflint
-        entry: tflint --chdir terraform
+        entry: tflint
         language: system
-        pass_filenames: false
+        files: \.tf$
 
       - id: terrascan
         name: terrascan
-        entry: terrascan scan -i terraform -f terraform/main.tf -f terraform/kms.tf -f terraform/provider.tf
+        entry: terrascan scan -i terraform
         language: system
-        pass_filenames: false
+        files: \.tf$
 
       - id: kics
         name: kics
-        entry: kics scan -p terraform/main.tf,terraform/kms.tf,terraform/provider.tf,docker/Dockerfile --queries-path /opt/homebrew/opt/kics/share/kics/assets/queries --no-progress --type terraform,dockerfile --fail-on HIGH,CRITICAL
+        entry: kics scan --queries-path /opt/homebrew/opt/kics/share/kics/assets/queries --no-progress --fail-on HIGH,CRITICAL -p
         language: system
-        pass_filenames: false
+        files: \.(tf|Dockerfile)$
 
       - id: trivy
         name: trivy
-        entry: trivy fs . --quiet --skip-dirs node_modules,.mypy_cache,.terraform,.docker-colima,.docker
+        entry: trivy fs --quiet
         language: system
-        pass_filenames: false
+        files: \.(tf|Dockerfile|txt|py)$
 
       - id: grype
         name: grype
-        entry: grype dir:. --quiet --exclude "./node_modules/**" --exclude "./.mypy_cache/**" --exclude "./.terraform/**" --exclude "./.docker-colima/**" --exclude "./.docker/**"
+        entry: grype --quiet
         language: system
-        pass_filenames: false
+        files: ^(docker/requirements\.txt|docker/Dockerfile)$
 
       - id: snyk
         name: snyk

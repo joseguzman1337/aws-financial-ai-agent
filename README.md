@@ -102,7 +102,9 @@ A production-ready, serverless financial AI agent built with **FastAPI**, **Lang
 <details>
 <summary><b>Running Security Scans</b></summary>
 
-Hooks run automatically on `git commit`, but can be invoked manually:
+Hooks run automatically on `git commit`. **Moving forward, only modified/staged files are scanned per commit** to ensure speed and efficiency.
+
+To run manually:
 ```bash
 bash .husky/pre-commit
 ```
