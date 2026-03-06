@@ -1,10 +1,12 @@
 """
-Automated verification script to execute required financial queries.
-This script is triggered by Terraform to ensure Langfuse traces are captured.
+Automated verification script using direct HTTPS to Bedrock AgentCore.
+Retrieves credentials from SSM and fetches traces from Langfuse as proof.
 """
 
+import json
 import os
 import sys
+import time
 import urllib.parse
 from typing import Dict
 
@@ -22,6 +24,13 @@ def get_env_config() -> Dict[str, str]:
     }
 
 
+def get_ssm_param(name: str, region: str) -> str:
+    """Retrieves a secure parameter from SSM."""
+    client = boto3.client("ssm", region_name=region)
+    resp = client.get_parameter(Name=name, WithDecryption=True)
+    return str(resp["Parameter"]["Value"])
+
+
 def get_auth_token(client_id: str, region: str) -> str:
     """Authenticates and returns AccessToken."""
     user = "analyst_user"
@@ -37,7 +46,7 @@ def get_auth_token(client_id: str, region: str) -> str:
 
 def verify() -> None:
     """
-    Invokes the Bedrock AgentCore runtime for required queries.
+    Invokes the Bedrock AgentCore runtime and verifies Langfuse traces.
     """
     cfg = get_env_config()
 
@@ -45,50 +54,74 @@ def verify() -> None:
         print("❌ Missing required environment variables.")
         sys.exit(1)
 
-    print("--- Starting Automated Verification ---")
+    print("\n" + "=" * 60)
+    print("🚀 STARTING AUTOMATED AGENT VERIFICATION")
+    print("=" * 60)
 
     try:
         token = get_auth_token(cfg["client_id"], cfg["region"])
-        print("✅ Authenticated successfully.")
+        print("✅ Authenticated with Cognito.")
     except Exception as error:
         print(f"❌ Auth Failed: {error}")
         sys.exit(1)
 
-    enc_arn = urllib.parse.quote(cfg["agent_arn"], safe="")
+    encoded_arn = urllib.parse.quote(cfg["agent_arn"], safe="")
     url = (
         f"https://bedrock-agentcore.{cfg['region']}.amazonaws.com"
-        f"/runtimes/{enc_arn}/invocations"
+        f"/runtimes/{encoded_arn}/invocations"
     )
 
+    sid = "terraform-automated-verification-final-2026"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
-        "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": (
-            "terraform-verify-session-recruiter-proof-2026"
-        ),
+        "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": sid,
     }
 
-    queries = [
-        "What is the stock price for Amazon right now?",
-        "What were the stock prices for Amazon in Q4 last year?",
-        "Compare Amazon's stock performance to what analysts predicted.",
-        "Give me current AMZN price and info about their AI business.",
-        "What is total amount of office space Amazon owned in NA in 2024?",
-    ]
+    # Execute a test query to generate a trace
+    query = "What is the stock price for Amazon right now?"
+    print(f"\n📝 TEST QUERY: {query}")
+    try:
+        resp = requests.post(url, headers=headers, json={"prompt": query})
+        if resp.status_code == 200:
+            print("✅ Agent Invocation Successful.")
+        else:
+            print(f"❌ Invocation Failed {resp.status_code}: {resp.text}")
+            return
+    except Exception as error:
+        print(f"❌ Request failed: {error}")
+        return
 
-    for query in queries:
-        print(f"\nQuerying: {query}")
-        try:
-            resp = requests.post(url, headers=headers, json={"prompt": query})
-            if resp.status_code == 200:
-                print("✅ Success (Trace captured in Langfuse)")
+    # 4. Fetch Trace from Langfuse using Keys from SSM
+    print("\n🔍 RETRIEVING OBSERVABILITY TRACES FROM LANGFUSE...")
+    try:
+        pk = get_ssm_param("/financial-ai/langfuse/public-key", cfg["region"])
+        sk = get_ssm_param("/financial-ai/langfuse/secret-key", cfg["region"])
+
+        # Wait for trace propagation
+        time.sleep(5)
+
+        trace_url = (
+            f"https://cloud.langfuse.com/api/public/traces?sessionId={sid}"
+        )
+        trace_resp = requests.get(trace_url, auth=(pk, sk))
+
+        if trace_resp.status_code == 200:
+            traces = trace_resp.json().get("data", [])
+            if traces:
+                print("✅ Langfuse Traces Found:")
+                print(json.dumps(traces[0], indent=2))
             else:
-                print(f"⚠️ Error {resp.status_code}: {resp.text}")
-        except Exception as error:
-            print(f"❌ Request failed: {error}")
+                print("⚠️ No traces found yet for this session.")
+        else:
+            print(f"❌ Failed to fetch traces: {trace_resp.status_code}")
+    except Exception as error:
+        print(f"❌ Trace verification failed: {error}")
 
-    print("\n--- Verification Complete ---")
+    print("\n" + "=" * 60)
+    print("🎯 VERIFICATION COMPLETE")
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":

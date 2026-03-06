@@ -261,11 +261,31 @@ resource "aws_iam_role_policy" "agentcore_execution_policy" {
         ]
         Effect   = "Allow"
         Resource = aws_kms_key.app_secrets.arn
+      },
+      {
+        Sid    = "AllowLogging"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Effect   = "Allow"
+        Resource = "${aws_cloudwatch_log_group.agent_logs.arn}:*"
       }
     ]
   })
 }
 
+
+resource "aws_cloudwatch_log_group" "agent_logs" {
+  name              = "/aws/bedrock/agent-runtime/Financial_Analyst_Agent"
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.app_secrets.arn
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+}
 
 # 3. Agentcore Runtime (from task1.txt)
 resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
@@ -310,6 +330,7 @@ resource "null_resource" "agent_verification" {
       AGENT_ARN         = aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn
       ACCOUNT_ID        = "162187491349"
       AWS_REGION        = var.region
+      AWS_PROFILE       = "t1cx"
     }
   }
 
