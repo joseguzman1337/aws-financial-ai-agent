@@ -1,6 +1,6 @@
 # AWS Financial AI Agent - Secure IaC & Containerized Deployment
 
-A production-ready, serverless financial AI agent built with **FastAPI**, **LangGraph**, and **AWS Bedrock AgentCore**, featuring a rigorous automated security and linting pipeline.
+A production-ready financial AI agent built with **FastAPI**, **LangGraph**, and **AWS Bedrock AgentCore**, featuring a rigorous automated security and linting pipeline.
 
 ---
 
@@ -17,7 +17,7 @@ A production-ready, serverless financial AI agent built with **FastAPI**, **Lang
 <summary><b>2. Containerization (Python 3.13)</b></summary>
 
 - **Modern Stack:** Upgraded base image to `python:3.13-slim`.
-- **Security Hardening:** Implemented non-root user (`appuser`), pinned `pip` version, and added container `HEALTHCHECK`.
+- **Security Hardening:** Implemented non-root user (`appuser`) and pinned `pip` version.
 - **ARM64 Native Builds:** Leveraged **Colima** to build and push native `linux/arm64` images to AWS ECR.
 </details>
 
@@ -134,18 +134,20 @@ bash .husky/pre-commit
 Users can verify the live deployment using the following steps:
 
 1. **Open `invocation_demo.ipynb`**: This notebook contains the executable proof.
-2. **Step 1: Identity Verification**: Run the first cell to authenticate against the Cognito User Pool. This proves the secure inbound authorization requirement.
-3. **Step 2: Live Agent Invocation**: Run the second and third cells. This will call the **live AWS Agentcore URL**.
-   - Observe the **Real-time Streaming**: Responses are yield token-by-token using Server-Sent Events (SSE).
-   - Check the **Knowledge Base**: The agent will retrieve data from the 2024 Annual Report (e.g., North America office space) and 2025 releases.
-4. **Step 3: Observability Audit**: Run the final cell. This fetches the trace data directly from the **Langfuse API**, proving that every reasoning step, tool call, and LLM interaction is being monitored and recorded.
+2. **AWS Authentication Phase**: Run the setup/alias cell. It loads runtime logic from GitHub and bootstraps passwordless AWS access (SigV4) from the runtime identity.
+3. **Live Agent Invocation**: Run the query cell to call the **live AWS AgentCore runtime URL**.
+   - Observe **real-time streaming** responses via SSE.
+   - UI output is rendered as dark, left-justified floating chat boxes (Q/A) with markdown-aware formatting.
+4. **Observability Audit**: Run the observability cell. It retrieves Langfuse credentials from AWS SSM and verifies trace API access.
 </details>
 
 <details>
 <summary><b>3. Troubleshooting Verification</b></summary>
 
-- **Expired Token**: If you receive a `401 Unauthorized`, re-run the Cognito authentication cell to refresh your Bearer token.
-- **Empty Trace**: If Langfuse returns an empty array, ensure the `sessionId` in the API call matches the one used in the invocation headers.
+- **AWS CLI missing in runtime**: Re-run the setup cell. It installs `awscli` and falls back to `python -m awscli` when needed.
+- **Expired Token**: Re-run the authentication/setup phase to refresh temporary AWS credentials.
+- **No token counts in response**: Some AgentCore/model paths do not expose usage metadata. Notebook prints `Tokens: usage coming soon` for this case.
+- **Empty Trace**: Ensure the `sessionId` in the Langfuse query matches the invocation session ID printed by the notebook.
 </details>
 
 ---
