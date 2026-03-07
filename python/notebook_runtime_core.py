@@ -410,6 +410,8 @@ class NotebookRuntimeCore:
             if "inputTokens" in resp and resp["inputTokens"] is not None:
                 return int(resp["inputTokens"]), None
         except Exception as e:
+            if isinstance(e, FileNotFoundError):
+                return None, "aws CLI not installed in runtime"
             return None, str(e)
         return None, "empty CountTokens response"
 
