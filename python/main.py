@@ -11,7 +11,7 @@ import uuid
 from agent import get_agent_graph
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
-from langfuse import get_client
+from langfuse import get_client, propagate_attributes
 from langfuse_config import ensure_langfuse_env
 from langfuse.langchain import CallbackHandler
 
@@ -57,7 +57,7 @@ async def invoke_agent(request: Request):
         callbacks = []
         if langfuse_enabled:
             langfuse_handler = CallbackHandler(
-                trace_context={"trace_id": session_id},
+                trace_context={},
             )
             callbacks = [langfuse_handler]
         else:
@@ -85,9 +85,10 @@ async def invoke_agent(request: Request):
                         name="agentcore-invocation",
                         input={"session_id": session_id, "prompt": query},
                     ) as span:
-                        result = await get_agent_graph().ainvoke(
-                            agent_input, config=config
-                        )
+                        with propagate_attributes(session_id=session_id):
+                            result = await get_agent_graph().ainvoke(
+                                agent_input, config=config
+                            )
                         span.update(output={"status": "ok"})
                 else:
                     result = await get_agent_graph().ainvoke(
