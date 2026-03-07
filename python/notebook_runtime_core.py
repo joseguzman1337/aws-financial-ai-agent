@@ -931,6 +931,73 @@ class NotebookRuntimeCore:
                     )
             else:
                 print(f"Langfuse cost by model(v2): HTTP {m_model.status_code}")
+
+            # Fallback: aggregate cost/tokens from raw observations.
+            obs = _probe("/api/public/observations", {"limit": 200})
+            if obs.status_code == 200:
+                orows = obs.json().get("data", [])
+                total_cost = 0.0
+                total_tokens = 0
+                priced_rows = 0
+                token_rows = 0
+                for row in orows:
+                    if not isinstance(row, dict):
+                        continue
+                    # Handle common cost key variants across versions.
+                    cost_candidates = [
+                        row.get("totalCost"),
+                        row.get("cost"),
+                        (row.get("usage") or {}).get("totalCost")
+                        if isinstance(row.get("usage"), dict)
+                        else None,
+                    ]
+                    cval = next(
+                        (
+                            float(v)
+                            for v in cost_candidates
+                            if isinstance(v, (int, float, str)) and str(v) not in ("", "None")
+                        ),
+                        None,
+                    )
+                    if cval is not None:
+                        total_cost += cval
+                        priced_rows += 1
+
+                    usage = row.get("usage") if isinstance(row.get("usage"), dict) else {}
+                    tok_candidates = [
+                        row.get("totalTokens"),
+                        usage.get("totalTokens"),
+                        usage.get("inputTokens"),
+                        usage.get("outputTokens"),
+                    ]
+                    tval = next(
+                        (
+                            int(float(v))
+                            for v in tok_candidates
+                            if isinstance(v, (int, float, str)) and str(v) not in ("", "None")
+                        ),
+                        None,
+                    )
+                    if tval is not None:
+                        total_tokens += tval
+                        token_rows += 1
+
+                print(
+                    "Langfuse observations fallback: rows={} rows_with_cost={} rows_with_tokens={} total_cost_usd={} total_tokens={}".format(
+                        len(orows),
+                        priced_rows,
+                        token_rows,
+                        round(total_cost, 6),
+                        total_tokens,
+                    )
+                )
+                if priced_rows == 0:
+                    print(
+                        "Cost note: no per-observation cost found in Langfuse data. "
+                        "Enable/verify model price mapping or send usage+cost with generations."
+                    )
+            else:
+                print(f"Langfuse observations fallback: HTTP {obs.status_code}")
         except Exception as e:
             print(f"Langfuse metrics(v2): error ({e})")
 
