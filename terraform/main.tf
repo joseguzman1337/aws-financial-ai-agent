@@ -31,7 +31,7 @@ resource "aws_cognito_user_pool" "financial_agent_pool" {
 }
 
 resource "aws_cognito_identity_pool" "financial_agent_identity_pool" {
-  # checkov:skip=CKV_AWS_366: Guest access is required for recruiter demo credential retrieval
+  # checkov:skip=CKV_AWS_366: Guest access is required for public demo credential retrieval
   identity_pool_name               = "FinancialAgentIdentityPool"
   allow_unauthenticated_identities = true # Enabled for guest credential retrieval
   allow_classic_flow               = true # Enabled to prevent session policy restrictions

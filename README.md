@@ -131,7 +131,7 @@ bash .husky/pre-commit
 <details>
 <summary><b>2. Live Verification Steps</b></summary>
 
-Recruiters can verify the live deployment using the following steps:
+Users can verify the live deployment using the following steps:
 
 1. **Open `invocation_demo.ipynb`**: This notebook contains the executable proof.
 2. **Step 1: Identity Verification**: Run the first cell to authenticate against the Cognito User Pool. This proves the secure inbound authorization requirement.

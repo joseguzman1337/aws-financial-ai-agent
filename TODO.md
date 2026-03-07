@@ -26,7 +26,7 @@
 - [x] **CI/CD Integration**: `.github/workflows/ci.yml` added — runs Terraform fmt/validate, Docker build, and Python linting (ruff) on every PR.
 
 ## 🟢 Low Priority (Polish & UX)
-- [ ] **Notebook UI Enhancement**: Add interactive widgets (`ipywidgets`) to allow recruiters to type custom ticker symbols.
+- [ ] **Notebook UI Enhancement**: Add interactive widgets (`ipywidgets`) to allow users to type custom ticker symbols.
 - [ ] **Cost Optimization**: Refine `infracost` hooks for more granular Bedrock model invocation cost estimates.
 - [x] **Security Auditing (partial)**: IAM policies narrowed from wildcard `*` to exact ARNs. `bedrock:Converse` + `bedrock:ConverseStream` added. `arn:aws:bedrock:*::foundation-model/*` (wildcard region) added for cross-region inference profiles.
     - Remaining `*` resources: `ecr:GetAuthorizationToken` (AWS requirement), `bedrock-agentcore:*`, `cognito-identity:*` (no resource-level support).
