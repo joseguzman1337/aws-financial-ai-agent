@@ -500,6 +500,110 @@ resource "aws_cloudwatch_log_group" "agent_logs" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "bedrock_model_invocation_logs" {
+  name              = "/aws/bedrock/model-invocations/Financial_Analyst_Agent"
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.app_secrets.arn
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_iam_role" "bedrock_model_logging_role" {
+  name = "bedrock_model_invocation_logging_role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "bedrock.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_iam_role_policy" "bedrock_model_logging_policy" {
+  name = "bedrock_model_invocation_logging_policy"
+  role = aws_iam_role.bedrock_model_logging_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid = "AllowCloudWatchLogging"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Effect = "Allow"
+        Resource = [
+          aws_cloudwatch_log_group.bedrock_model_invocation_logs.arn,
+          "${aws_cloudwatch_log_group.bedrock_model_invocation_logs.arn}:*"
+        ]
+      },
+      {
+        Sid = "AllowS3Delivery"
+        Action = [
+          "s3:PutObject",
+          "s3:GetBucketLocation",
+          "s3:ListBucket"
+        ]
+        Effect = "Allow"
+        Resource = [
+          aws_s3_bucket.financial_docs_logging.arn,
+          "${aws_s3_bucket.financial_docs_logging.arn}/*"
+        ]
+      },
+      {
+        Sid = "AllowKMSForLogging"
+        Action = [
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Effect   = "Allow"
+        Resource = aws_kms_key.app_secrets.arn
+      }
+    ]
+  })
+}
+
+resource "aws_bedrock_model_invocation_logging_configuration" "main" {
+  logging_config {
+    text_data_delivery_enabled      = true
+    image_data_delivery_enabled     = true
+    embedding_data_delivery_enabled = true
+    video_data_delivery_enabled     = false
+
+    cloudwatch_config {
+      log_group_name = aws_cloudwatch_log_group.bedrock_model_invocation_logs.name
+      role_arn       = aws_iam_role.bedrock_model_logging_role.arn
+
+      large_data_delivery_s3_config {
+        bucket_name = aws_s3_bucket.financial_docs_logging.id
+        key_prefix  = "bedrock/model-invocations/large/"
+      }
+    }
+
+    s3_config {
+      bucket_name = aws_s3_bucket.financial_docs_logging.id
+      key_prefix  = "bedrock/model-invocations/"
+    }
+  }
+}
+
 # 3. Agentcore Runtime (from task1.txt)
 resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
   agent_runtime_name = "Financial_Analyst_Agent"
