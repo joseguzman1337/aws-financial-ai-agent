@@ -604,9 +604,15 @@ class NotebookRuntimeCore:
         arn = self.sts.get_caller_identity()["Arn"]
         print(f"Observability identity: {arn}")
         print(f"Success: retrieved Langfuse keys (PK: {pk[:7]}...)")
-        auth = requests.get(
-            f"{base}/api/public/projects", auth=(pk, sk), timeout=30
-        )
+        def _probe(path: str, params: dict[str, Any] | None = None) -> requests.Response:
+            return requests.get(
+                f"{base}{path}",
+                params=params or {},
+                auth=(pk, sk),
+                timeout=30,
+            )
+
+        auth = _probe("/api/public/projects")
         if auth.status_code == 200:
             print("Langfuse auth: 200 OK")
             projects = auth.json().get("data", [])
@@ -620,11 +626,33 @@ class NotebookRuntimeCore:
         else:
             print(f"Langfuse auth: HTTP {auth.status_code}")
             return
-        traces = requests.get(
-            f"{base}/api/public/traces",
-            params={"sessionId": self.session_id, "limit": 5},
-            auth=(pk, sk),
-            timeout=30,
+
+        # Capability probe matrix (checks what endpoints/shape are available).
+        print("Langfuse capability check:")
+        capability_checks = [
+            ("traces.list", "/api/public/traces", {"limit": 1}),
+            (
+                "traces.by_session",
+                "/api/public/traces",
+                {"sessionId": self.session_id, "limit": 5},
+            ),
+            ("sessions.list", "/api/public/sessions", {"limit": 1}),
+            ("models.list", "/api/public/models", {"limit": 1}),
+            ("metrics.daily", "/api/public/metrics/daily", {}),
+        ]
+        cap_results: dict[str, int] = {}
+        for cap_name, cap_path, cap_params in capability_checks:
+            try:
+                r = _probe(cap_path, cap_params)
+                cap_results[cap_name] = r.status_code
+                print(f"  - {cap_name}: HTTP {r.status_code}")
+            except Exception as e:
+                cap_results[cap_name] = -1
+                print(f"  - {cap_name}: error ({e})")
+
+        traces = _probe(
+            "/api/public/traces",
+            {"sessionId": self.session_id, "limit": 5},
         )
         if traces.status_code == 200:
             data = traces.json().get("data", [])
@@ -633,6 +661,12 @@ class NotebookRuntimeCore:
                     self.session_id, len(data)
                 )
             )
+            page_info = traces.json().get("meta") or traces.json().get("pagination")
+            if isinstance(page_info, dict):
+                print(
+                    "Langfuse pagination fields: "
+                    + ", ".join(sorted(list(page_info.keys())))
+                )
             if data:
                 # Discover what this Langfuse project currently returns.
                 trace_keys = sorted(list(data[0].keys()))
@@ -653,12 +687,9 @@ class NotebookRuntimeCore:
                 print(self._wrap(pretty, width=79))
                 trace_id = data[0].get("id")
                 if trace_id:
-                    detail = requests.get(
-                        f"{base}/api/public/traces/{trace_id}",
-                        auth=(pk, sk),
-                        timeout=30,
-                    )
+                    detail = _probe(f"/api/public/traces/{trace_id}")
                     if detail.status_code == 200:
+                        print("Langfuse trace detail: 200 OK")
                         detail_obj = detail.json()
                         detail_data = detail_obj.get("data", detail_obj)
                         if isinstance(detail_data, dict):
@@ -675,6 +706,18 @@ class NotebookRuntimeCore:
                                     print(
                                         "Langfuse available observation fields: "
                                         + ", ".join(okeys)
+                                    )
+                            # Probe per-observation endpoint if IDs are present.
+                            if obs and isinstance(obs, list):
+                                obs_id = obs[0].get("id")
+                                if obs_id:
+                                    obs_detail = _probe(
+                                        f"/api/public/observations/{obs_id}"
+                                    )
+                                    print(
+                                        "Langfuse observation detail: HTTP {}".format(
+                                            obs_detail.status_code
+                                        )
                                     )
                     else:
                         print(f"Langfuse trace detail: HTTP {detail.status_code}")
