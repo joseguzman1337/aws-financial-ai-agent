@@ -224,13 +224,16 @@ class NotebookRuntimeCore:
         role: str,
         text: str,
         markdown_enabled: bool = False,
+        display_id: str | None = None,
+        update: bool = False,
     ) -> None:
         """Render Q/A boxes in notebooks with markdown support."""
         try:
-            from IPython.display import HTML, display  # type: ignore
+            from IPython.display import HTML, display, update_display  # type: ignore
         except Exception:
             prefix = "Q" if role == "q" else "A"
-            print(f"{prefix}: {self._wrap(text)}")
+            if not update:
+                print(f"{prefix}: {self._wrap(text)}")
             return
 
         if not self.chat_css_loaded:
@@ -274,7 +277,13 @@ class NotebookRuntimeCore:
             f"<div class='af-chat'><div class='af-msg {cls}'>"
             f"<div class='af-label'>{label}</div>{body_html}</div></div>"
         )
-        display(HTML(html))
+        if display_id:
+            if update:
+                update_display(HTML(html), display_id=display_id)
+            else:
+                display(HTML(html), display_id=display_id)
+        else:
+            display(HTML(html))
 
     def _render_sub_box(self, title: str, body: str) -> None:
         """Render left-justified dark metadata/tokens box per Q/A combo."""
@@ -349,6 +358,16 @@ class NotebookRuntimeCore:
                 model_info = f"{k}: {v}"
 
         parts: list[str] = []
+        streamed_answer = ""
+        live_answer_id = f"af-a-{uuid.uuid4().hex}"
+        self._render_chat_box(
+            "a",
+            "Thinking...",
+            markdown_enabled=True,
+            display_id=live_answer_id,
+            update=False,
+        )
+        last_ui = 0.0
         for raw in resp.iter_lines():
             if not raw:
                 continue
@@ -392,10 +411,31 @@ class NotebookRuntimeCore:
                 if usage.get("completionTokens") is not None:
                     token_usage["output"] = int(usage["completionTokens"])
             if "event" in evt:
-                parts.append(self._event_text(evt["event"]))
+                chunk = self._event_text(evt["event"])
+                if chunk:
+                    parts.append(chunk)
+                    streamed_answer += chunk
+                    now = time.time()
+                    if now - last_ui >= 0.2:
+                        self._render_chat_box(
+                            "a",
+                            streamed_answer,
+                            markdown_enabled=True,
+                            display_id=live_answer_id,
+                            update=True,
+                        )
+                        last_ui = now
 
-        answer = self._wrap(" ".join(p for p in parts if p))
-        self._render_chat_box("a", answer, markdown_enabled=True)
+        answer = streamed_answer if streamed_answer else "".join(
+            p for p in parts if p
+        )
+        self._render_chat_box(
+            "a",
+            answer,
+            markdown_enabled=True,
+            display_id=live_answer_id,
+            update=True,
+        )
         if (
             token_usage["total"] is None
             and token_usage["input"] is not None
