@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
 import time
 import urllib.parse
 import uuid
@@ -21,7 +23,11 @@ from botocore.credentials import Credentials
 
 
 class NotebookRuntimeCore:
-    def __init__(self, cfg: dict[str, Any] | None = None, params: dict[str, str] | None = None):
+    def __init__(
+        self,
+        cfg: dict[str, Any] | None = None,
+        params: dict[str, str] | None = None,
+    ):
         self.cfg = {
             "region": "us-east-1",
             "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:162187491349:runtime/Financial_Analyst_Agent-hvRgckAqaW",
@@ -44,6 +50,28 @@ class NotebookRuntimeCore:
         self.runtime_logged = False
         self.credentials: dict[str, str] | None = None
         self.refresh_clients()
+
+    def _aws_cmd(self) -> list[str]:
+        """Resolve AWS CLI invocation across mixed notebook runtimes."""
+        aws_bin = shutil.which("aws")
+        if aws_bin:
+            return [aws_bin]
+        try:
+            import awscli  # type: ignore  # noqa: F401
+
+            return [sys.executable, "-m", "awscli"]
+        except Exception:
+            pass
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-q", "awscli"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return [sys.executable, "-m", "awscli"]
+        except Exception:
+            return ["aws"]
 
     @property
     def agentcore_url(self) -> str:
@@ -68,13 +96,19 @@ class NotebookRuntimeCore:
             region_name=self.cfg["region"],
             config=Config(signature_version=UNSIGNED),
         )
-        identity_id = idc.get_id(IdentityPoolId=self.cfg["identity_pool_id"])["IdentityId"]
+        identity_id = idc.get_id(IdentityPoolId=self.cfg["identity_pool_id"])[
+            "IdentityId"
+        ]
         token = idc.get_open_id_token(IdentityId=identity_id)["Token"]
-        creds = boto3.client("sts", region_name=self.cfg["region"]).assume_role_with_web_identity(
+        creds = boto3.client(
+            "sts", region_name=self.cfg["region"]
+        ).assume_role_with_web_identity(
             RoleArn=self.cfg["unauth_role_arn"],
             RoleSessionName="NotebookGuestSession",
             WebIdentityToken=token,
-        )["Credentials"]
+        )[
+            "Credentials"
+        ]
         self.credentials = {
             "AccessKeyId": creds["AccessKeyId"],
             "SecretAccessKey": creds["SecretAccessKey"],
@@ -85,7 +119,11 @@ class NotebookRuntimeCore:
 
     def ensure_fresh(self, force: bool = False) -> None:
         age = int(time.time()) - int(self.last_refresh or 0)
-        if force or self.last_refresh == 0 or age >= int(self.cfg["credential_refresh_seconds"]):
+        if (
+            force
+            or self.last_refresh == 0
+            or age >= int(self.cfg["credential_refresh_seconds"])
+        ):
             self.bootstrap_guest()
             return
         try:
@@ -95,11 +133,15 @@ class NotebookRuntimeCore:
 
     def ssm_get(self, name: str) -> str:
         try:
-            return self.ssm.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
+            return self.ssm.get_parameter(Name=name, WithDecryption=True)[
+                "Parameter"
+            ]["Value"]
         except Exception as e:
             if "ExpiredToken" in str(e):
                 self.bootstrap_guest()
-                return self.ssm.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
+                return self.ssm.get_parameter(Name=name, WithDecryption=True)[
+                    "Parameter"
+                ]["Value"]
             raise
 
     def _runtime_id(self) -> str:
@@ -113,12 +155,14 @@ class NotebookRuntimeCore:
             env = os.environ.copy()
             if self.credentials:
                 env["AWS_ACCESS_KEY_ID"] = self.credentials["AccessKeyId"]
-                env["AWS_SECRET_ACCESS_KEY"] = self.credentials["SecretAccessKey"]
+                env["AWS_SECRET_ACCESS_KEY"] = self.credentials[
+                    "SecretAccessKey"
+                ]
                 env["AWS_SESSION_TOKEN"] = self.credentials["SessionToken"]
                 env["AWS_REGION"] = self.cfg["region"]
             out = subprocess.check_output(
-                [
-                    "aws",
+                self._aws_cmd()
+                + [
                     "bedrock-agentcore-control",
                     "get-agent-runtime",
                     "--region",
@@ -142,7 +186,9 @@ class NotebookRuntimeCore:
                 f"Runtime: id={rid} version={version} container={container} model={self.cfg['model_id']}"
             )
         except Exception:
-            print(f"Runtime: id={rid} model={self.cfg['model_id']} (runtime metadata not available)")
+            print(
+                f"Runtime: id={rid} model={self.cfg['model_id']} (runtime metadata not available)"
+            )
         self.runtime_logged = True
         self.model_logged = True
 
@@ -193,7 +239,13 @@ class NotebookRuntimeCore:
         headers = dict(req.prepare().headers)
 
         print(f"\nQ: {self._wrap(prompt)}")
-        resp = requests.post(self.agentcore_url, headers=headers, data=payload, timeout=120, stream=True)
+        resp = requests.post(
+            self.agentcore_url,
+            headers=headers,
+            data=payload,
+            timeout=120,
+            stream=True,
+        )
         print(
             "AgentCore metadata: runtimeSessionId={} statusCode={} contentType={}".format(
                 self.session_id,
@@ -201,13 +253,23 @@ class NotebookRuntimeCore:
                 resp.headers.get("Content-Type", "unknown"),
             )
         )
-        request_id = resp.headers.get("x-amzn-requestid") or resp.headers.get("X-Amzn-RequestId")
+        request_id = resp.headers.get("x-amzn-requestid") or resp.headers.get(
+            "X-Amzn-RequestId"
+        )
 
         model_info = None
-        token_usage: dict[str, int | None] = {"input": None, "output": None, "total": None}
+        token_usage: dict[str, int | None] = {
+            "input": None,
+            "output": None,
+            "total": None,
+        }
         for k, v in resp.headers.items():
             lk = k.lower()
-            if model_info is None and any(x in lk for x in ("model", "inference", "profile")) and v:
+            if (
+                model_info is None
+                and any(x in lk for x in ("model", "inference", "profile"))
+                and v
+            ):
                 model_info = f"{k}: {v}"
 
         parts: list[str] = []
@@ -258,38 +320,70 @@ class NotebookRuntimeCore:
 
         answer = self._wrap(" ".join(p for p in parts if p))
         print(f"A: {answer}")
-        if token_usage["total"] is None and token_usage["input"] is not None and token_usage["output"] is not None:
-            token_usage["total"] = int(token_usage["input"]) + int(token_usage["output"])
+        if (
+            token_usage["total"] is None
+            and token_usage["input"] is not None
+            and token_usage["output"] is not None
+        ):
+            token_usage["total"] = int(token_usage["input"]) + int(
+                token_usage["output"]
+            )
         if any(v is not None for v in token_usage.values()):
             print(
                 "Tokens: input={} output={} total={}".format(
-                    token_usage["input"] if token_usage["input"] is not None else "n/a",
-                    token_usage["output"] if token_usage["output"] is not None else "n/a",
-                    token_usage["total"] if token_usage["total"] is not None else "n/a",
+                    (
+                        token_usage["input"]
+                        if token_usage["input"] is not None
+                        else "n/a"
+                    ),
+                    (
+                        token_usage["output"]
+                        if token_usage["output"] is not None
+                        else "n/a"
+                    ),
+                    (
+                        token_usage["total"]
+                        if token_usage["total"] is not None
+                        else "n/a"
+                    ),
                 )
             )
         else:
             # AgentCore stream currently omits usage; fallback to Bedrock CountTokens.
             est_in, err_in = self._count_tokens_text(prompt, role="user")
-            est_out, err_out = self._count_tokens_text(answer, role="assistant") if answer else (None, None)
+            est_out, err_out = (
+                self._count_tokens_text(answer, role="assistant")
+                if answer
+                else (None, None)
+            )
             if est_in is not None or est_out is not None:
                 est_total = (est_in or 0) + (est_out or 0)
                 print(
                     "Tokens: input={} output={} total={} (source=bedrock:CountTokens estimate)".format(
                         est_in if est_in is not None else "n/a",
                         est_out if est_out is not None else "n/a",
-                        est_total if (est_in is not None or est_out is not None) else "n/a",
+                        (
+                            est_total
+                            if (est_in is not None or est_out is not None)
+                            else "n/a"
+                        ),
                     )
                 )
             else:
                 reason = err_in or err_out or "unknown error"
-                print(f"Tokens: not exposed by AgentCore metadata; CountTokens unavailable ({reason})")
+                print(
+                    f"Tokens: not exposed by AgentCore metadata; CountTokens unavailable ({reason})"
+                )
         if (not self.model_logged) and model_info:
             print(f"Model: {model_info}")
             self.model_logged = True
-        self._print_realtime_invocation_metrics(request_id=request_id, session_id=self.session_id)
+        self._print_realtime_invocation_metrics(
+            request_id=request_id, session_id=self.session_id
+        )
 
-    def _print_realtime_invocation_metrics(self, request_id: str | None, session_id: str) -> None:
+    def _print_realtime_invocation_metrics(
+        self, request_id: str | None, session_id: str
+    ) -> None:
         """Poll CloudWatch Bedrock invocation logs and print parsed metrics as soon as available."""
         group = self.cfg.get("invocation_log_group")
         if not group:
@@ -307,12 +401,18 @@ class NotebookRuntimeCore:
                     limit=100,
                 )
             except Exception as e:
-                print(f"Invocation metrics (real-time logs): unavailable ({e})")
+                print(
+                    f"Invocation metrics (real-time logs): unavailable ({e})"
+                )
                 return
             events = resp.get("events", [])
             for ev in reversed(events):
                 msg = ev.get("message", "")
-                if request_id and request_id not in msg and session_id not in msg:
+                if (
+                    request_id
+                    and request_id not in msg
+                    and session_id not in msg
+                ):
                     continue
                 parsed = self._extract_invocation_metrics_from_log_message(msg)
                 if parsed:
@@ -334,21 +434,29 @@ class NotebookRuntimeCore:
         )
 
     @staticmethod
-    def _extract_invocation_metrics_from_log_message(message: str) -> dict[str, Any] | None:
+    def _extract_invocation_metrics_from_log_message(
+        message: str,
+    ) -> dict[str, Any] | None:
         # Try JSON first.
         try:
             js = json.loads(message)
+
             def pick(*keys):
                 for k in keys:
                     if k in js and js[k] is not None:
                         return js[k]
                 return None
+
             out = {
                 "requestId": pick("requestId", "RequestId", "requestID"),
                 "modelId": pick("modelId", "ModelId"),
                 "inputTokenCount": pick("inputTokenCount", "InputTokenCount"),
-                "outputTokenCount": pick("outputTokenCount", "OutputTokenCount"),
-                "invocationLatency": pick("invocationLatency", "InvocationLatency", "latencyMs"),
+                "outputTokenCount": pick(
+                    "outputTokenCount", "OutputTokenCount"
+                ),
+                "invocationLatency": pick(
+                    "invocationLatency", "InvocationLatency", "latencyMs"
+                ),
             }
             if any(v is not None for v in out.values()):
                 return out
@@ -367,10 +475,21 @@ class NotebookRuntimeCore:
         for k, pat in patterns.items():
             m = re.search(pat, message)
             if m:
-                out[k] = int(m.group(1)) if k in ("inputTokenCount", "outputTokenCount", "invocationLatency") else m.group(1)
+                out[k] = (
+                    int(m.group(1))
+                    if k
+                    in (
+                        "inputTokenCount",
+                        "outputTokenCount",
+                        "invocationLatency",
+                    )
+                    else m.group(1)
+                )
         return out or None
 
-    def _count_tokens_text(self, text: str, role: str) -> tuple[int | None, str | None]:
+    def _count_tokens_text(
+        self, text: str, role: str
+    ) -> tuple[int | None, str | None]:
         try:
             req = {
                 "converse": {
@@ -382,12 +501,14 @@ class NotebookRuntimeCore:
             env = os.environ.copy()
             if self.credentials:
                 env["AWS_ACCESS_KEY_ID"] = self.credentials["AccessKeyId"]
-                env["AWS_SECRET_ACCESS_KEY"] = self.credentials["SecretAccessKey"]
+                env["AWS_SECRET_ACCESS_KEY"] = self.credentials[
+                    "SecretAccessKey"
+                ]
                 env["AWS_SESSION_TOKEN"] = self.credentials["SessionToken"]
             env["AWS_REGION"] = self.cfg["region"]
             proc = subprocess.run(
-                [
-                    "aws",
+                self._aws_cmd()
+                + [
                     "bedrock-runtime",
                     "count-tokens",
                     "--region",
@@ -405,7 +526,11 @@ class NotebookRuntimeCore:
             )
             if proc.returncode != 0:
                 err = (proc.stderr or proc.stdout or "").strip()
-                return None, err.splitlines()[-1] if err else "CountTokens command failed"
+                return None, (
+                    err.splitlines()[-1]
+                    if err
+                    else "CountTokens command failed"
+                )
             resp = json.loads(proc.stdout)
             if "inputTokens" in resp and resp["inputTokens"] is not None:
                 return int(resp["inputTokens"]), None
@@ -423,5 +548,7 @@ class NotebookRuntimeCore:
         arn = self.sts.get_caller_identity()["Arn"]
         print(f"Observability identity: {arn}")
         print(f"Success: retrieved Langfuse keys (PK: {pk[:7]}...)")
-        auth = requests.get(f"{base}/api/public/projects", auth=(pk, sk), timeout=30)
+        auth = requests.get(
+            f"{base}/api/public/projects", auth=(pk, sk), timeout=30
+        )
         print(f"Langfuse auth status: {auth.status_code}")
