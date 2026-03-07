@@ -51,11 +51,5 @@ def aws_auth_phase_setup() -> dict:
 
     robjects.r(f"source('{r_file}')")
     robjects.r("rt <- runtime_init(); rt <- refresh_clients(rt)")
-    reticulate_ver_expr = robjects.r("as.character(utils::packageVersion('reticulate'))")
-    reticulate_ver = str(reticulate_ver_expr).strip().strip("[]").strip("'").strip('"')
-    print(
-        f"Setup complete: tools installed [rpy2,r-base,neofetch,reticulate={reticulate_ver}] "
-        " + GitHub R+PY runtime loaded/configured."
-    )
+    # Keep first block output minimal (neofetch only).
     return {"robjects": robjects}
-
