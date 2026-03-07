@@ -48,7 +48,7 @@ runtime_init <- function(cfg = default_cfg, params = default_params) {
   botocore_awsrequest <<- import("botocore.awsrequest")
   botocore_session <<- import("botocore.session")
   id <- as.character(reticulate::import("uuid")$uuid4())
-  list(cfg = cfg, params = params, session_id = id, last_refresh = 0L)
+  list(cfg = cfg, params = params, session_id = id, last_refresh = 0L, model_logged = FALSE)
 }
 
 refresh_clients <- function(rt) {
@@ -161,6 +161,15 @@ query_agent <- function(rt, prompt) {
   cat("\nQ: ")
   pretty_print(prompt, width = 79)
   r <- POST(url, add_headers(.headers = h), body = payload, encode = "raw", timeout(120))
+  model_info <- NULL
+  token_usage <- list(input = NULL, output = NULL, total = NULL)
+  hdr_names <- tolower(names(headers(r)))
+  model_hdr_idx <- grep("model|inference|profile", hdr_names)
+  if (length(model_hdr_idx) > 0) {
+    k <- names(headers(r))[model_hdr_idx[1]]
+    v <- headers(r)[[k]]
+    if (!is.null(v) && nzchar(as.character(v))) model_info <- paste0(k, ": ", as.character(v))
+  }
   raw_txt <- content(r, "text", encoding = "UTF-8")
   lines <- unlist(strsplit(raw_txt, "\n", fixed = TRUE))
   parts <- character(0)
@@ -174,11 +183,57 @@ query_agent <- function(rt, prompt) {
       parts <- c(parts, paste0("Error: ", as.character(evt$error)))
       next
     }
+    if (!is.null(evt$usage) && is.list(evt$usage)) {
+      u <- evt$usage
+      if (!is.null(u$inputTokens)) token_usage$input <- as.integer(u$inputTokens)
+      if (!is.null(u$outputTokens)) token_usage$output <- as.integer(u$outputTokens)
+      if (!is.null(u$totalTokens)) token_usage$total <- as.integer(u$totalTokens)
+      if (!is.null(u$promptTokens)) token_usage$input <- as.integer(u$promptTokens)
+      if (!is.null(u$completionTokens)) token_usage$output <- as.integer(u$completionTokens)
+    }
+    if (!is.null(evt$tokenUsage) && is.list(evt$tokenUsage)) {
+      u <- evt$tokenUsage
+      if (!is.null(u$inputTokens)) token_usage$input <- as.integer(u$inputTokens)
+      if (!is.null(u$outputTokens)) token_usage$output <- as.integer(u$outputTokens)
+      if (!is.null(u$totalTokens)) token_usage$total <- as.integer(u$totalTokens)
+    }
+    if (!is.null(evt$inputTokens)) token_usage$input <- as.integer(evt$inputTokens)
+    if (!is.null(evt$outputTokens)) token_usage$output <- as.integer(evt$outputTokens)
+    if (!is.null(evt$totalTokens)) token_usage$total <- as.integer(evt$totalTokens)
+    if (is.null(model_info)) {
+      for (mk in c("model", "modelId", "model_id", "inferenceProfileId", "inference_profile_id", "foundationModel")) {
+        if (!is.null(evt[[mk]]) && nzchar(as.character(evt[[mk]]))) {
+          model_info <- paste0(mk, ": ", as.character(evt[[mk]]))
+          break
+        }
+      }
+    }
     if (!is.null(evt$event)) parts <- c(parts, event_text(evt$event))
+  }
+  if (!isTRUE(rt$model_logged)) {
+    if (is.null(model_info) || !nzchar(trimws(model_info))) {
+      cat("Model: not exposed by AgentCore response metadata\n")
+    } else {
+      cat("Model:", model_info, "\n")
+    }
+    rt$model_logged <- TRUE
   }
   answer <- trimws(paste(parts, collapse = " "))
   cat("A: ")
   pretty_print(answer, width = 79)
+  if (is.null(token_usage$total) && !is.null(token_usage$input) && !is.null(token_usage$output)) {
+    token_usage$total <- as.integer(token_usage$input + token_usage$output)
+  }
+  if (!is.null(token_usage$input) || !is.null(token_usage$output) || !is.null(token_usage$total)) {
+    cat(sprintf(
+      "Tokens: input=%s output=%s total=%s\n",
+      ifelse(is.null(token_usage$input), "n/a", as.character(token_usage$input)),
+      ifelse(is.null(token_usage$output), "n/a", as.character(token_usage$output)),
+      ifelse(is.null(token_usage$total), "n/a", as.character(token_usage$total))
+    ))
+  } else {
+    cat("Tokens: not exposed by AgentCore response metadata\n")
+  }
   rt
 }
 
