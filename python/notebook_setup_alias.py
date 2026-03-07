@@ -61,6 +61,7 @@ def aws_auth_phase_setup() -> dict:
     py_file.write_text(requests.get(py_raw, timeout=30).text, encoding="utf-8")
     r_file.write_text(requests.get(r_raw, timeout=30).text, encoding="utf-8")
     os.environ["NOTEBOOK_RUNTIME_PY_FILE"] = str(py_file)
+    os.environ["RETICULATE_PYTHON"] = sys.executable
 
     robjects.r(f"source('{r_file}')")
     robjects.r("rt <- runtime_init(); rt <- refresh_clients(rt)")

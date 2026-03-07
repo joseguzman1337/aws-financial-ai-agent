@@ -19,6 +19,10 @@ default_params <- list(
 )
 
 runtime_init <- function(cfg = default_cfg, params = default_params) {
+  py_bin <- Sys.getenv("RETICULATE_PYTHON", "")
+  if (nzchar(py_bin)) {
+    use_python(py_bin, required = TRUE)
+  }
   py_file <- Sys.getenv("NOTEBOOK_RUNTIME_PY_FILE", "/tmp/notebook_runtime_core.py")
   if (!file.exists(py_file)) {
     stop(sprintf("Python runtime core not found at %s", py_file))
