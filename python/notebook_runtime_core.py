@@ -821,6 +821,57 @@ class NotebookRuntimeCore:
                     )
             else:
                 print(f"Langfuse metrics(v2): HTTP {m.status_code}")
+
+            # Daily cost time series (last 7 days).
+            frm_7d = now - timedelta(days=7)
+            daily_cost_query = {
+                "view": "observations",
+                "metrics": [
+                    {"measure": "totalCost", "aggregation": "sum"},
+                ],
+                "timeDimension": {"granularity": "day"},
+                "fromTimestamp": frm_7d.isoformat().replace("+00:00", "Z"),
+                "toTimestamp": now.isoformat().replace("+00:00", "Z"),
+            }
+            m_daily = _probe(
+                "/api/public/v2/metrics",
+                {"query": json.dumps(daily_cost_query, separators=(",", ":"))},
+            )
+            if m_daily.status_code == 200:
+                drows = m_daily.json().get("data", [])
+                print(f"Langfuse daily cost(v2): 200 OK rows={len(drows)}")
+                for r in drows[:7]:
+                    day = r.get("timestampDay") or r.get("date") or "n/a"
+                    cost = r.get("totalCost", "n/a")
+                    print(f"  - day={day} totalCost={cost}")
+            else:
+                print(f"Langfuse daily cost(v2): HTTP {m_daily.status_code}")
+
+            # Cost by model (last 7 days).
+            by_model_query = {
+                "view": "observations",
+                "metrics": [
+                    {"measure": "totalCost", "aggregation": "sum"},
+                    {"measure": "count", "aggregation": "count"},
+                ],
+                "dimensions": [{"field": "providedModelName"}],
+                "fromTimestamp": frm_7d.isoformat().replace("+00:00", "Z"),
+                "toTimestamp": now.isoformat().replace("+00:00", "Z"),
+            }
+            m_model = _probe(
+                "/api/public/v2/metrics",
+                {"query": json.dumps(by_model_query, separators=(",", ":"))},
+            )
+            if m_model.status_code == 200:
+                mrows = m_model.json().get("data", [])
+                print(f"Langfuse cost by model(v2): 200 OK rows={len(mrows)}")
+                for r in mrows[:10]:
+                    model = r.get("providedModelName", "n/a")
+                    cost = r.get("totalCost", "n/a")
+                    count = r.get("count", "n/a")
+                    print(f"  - model={model} totalCost={cost} count={count}")
+            else:
+                print(f"Langfuse cost by model(v2): HTTP {m_model.status_code}")
         except Exception as e:
             print(f"Langfuse metrics(v2): error ({e})")
 
