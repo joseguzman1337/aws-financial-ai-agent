@@ -32,7 +32,8 @@ def aws_auth_phase_setup() -> dict:
     )
 
     # Keep visible by request.
-    subprocess.run(["neofetch"], check=True)
+    neofetch_out = subprocess.check_output(["neofetch"], text=True)
+    print(neofetch_out, end="")
 
     warnings.filterwarnings(
         "ignore",
