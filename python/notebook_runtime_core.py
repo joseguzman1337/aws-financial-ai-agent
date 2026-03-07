@@ -11,6 +11,7 @@ import sys
 import time
 import urllib.parse
 import uuid
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any
@@ -817,6 +818,62 @@ class NotebookRuntimeCore:
                 print(f"Langfuse metrics(v2): HTTP {m.status_code}")
         except Exception as e:
             print(f"Langfuse metrics(v2): error ({e})")
+
+        # Persist a real observability report artifact from live API responses.
+        try:
+            report = {
+                "generatedAt": datetime.now(timezone.utc).isoformat(),
+                "sessionId": self.session_id,
+                "baseUrl": base,
+                "identityArn": arn,
+                "projectsStatus": auth.status_code,
+                "tracesStatus": traces.status_code,
+                "projects": auth.json().get("data", [])
+                if auth.status_code == 200
+                else [],
+                "traces": traces.json().get("data", [])
+                if traces.status_code == 200
+                else [],
+            }
+            out_dir = Path("artifacts") / "langfuse"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            report_json = out_dir / f"notebook_observability_{ts}.json"
+            report_json.write_text(
+                json.dumps(report, indent=2),
+                encoding="utf-8",
+            )
+            latest = out_dir / "notebook_observability_latest.json"
+            latest.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+            traces_csv = out_dir / "notebook_traces_latest.csv"
+            rows = report.get("traces", [])
+            if isinstance(rows, list) and rows:
+                keys: set[str] = set()
+                for row in rows:
+                    if isinstance(row, dict):
+                        keys.update(row.keys())
+                cols = sorted(list(keys))
+                lines = [",".join(cols)]
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    vals = []
+                    for c in cols:
+                        v = row.get(c, "")
+                        if isinstance(v, (dict, list)):
+                            v = json.dumps(v, separators=(",", ":"))
+                        s = str(v).replace('"', '""')
+                        vals.append(f'"{s}"')
+                    lines.append(",".join(vals))
+                traces_csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+            print(f"Observability report saved: {report_json}")
+            print(f"Observability report latest: {latest}")
+            if traces_csv.exists():
+                print(f"Observability traces CSV: {traces_csv}")
+        except Exception as e:
+            print(f"Observability report export failed: {e}")
 
     def _load_langfuse_openapi_paths(self) -> set[str]:
         """Fetch Langfuse OpenAPI YAML and extract path keys."""
