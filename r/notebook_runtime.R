@@ -5,6 +5,25 @@ suppressPackageStartupMessages({
   library(reticulate)
 })
 
+event_text <- function(x) {
+  if (is.null(x)) return("")
+  if (is.character(x)) return(paste(x, collapse = ""))
+  if (is.list(x)) {
+    if (!is.null(x$text)) return(as.character(x$text))
+    if (!is.null(x$content)) return(event_text(x$content))
+    out <- vapply(x, event_text, character(1))
+    return(paste(out, collapse = ""))
+  }
+  as.character(x)
+}
+
+pretty_print <- function(text, width = 79) {
+  clean <- gsub("\\s+", " ", trimws(text))
+  if (!nzchar(clean)) return(invisible(NULL))
+  lines <- strwrap(clean, width = width)
+  cat(paste(lines, collapse = "\n"), "\n", sep = "")
+}
+
 default_cfg <- list(
   region = "us-east-1",
   agent_arn = "arn:aws:bedrock-agentcore:us-east-1:162187491349:runtime/Financial_Analyst_Agent-hvRgckAqaW",
@@ -139,9 +158,27 @@ query_agent <- function(rt, prompt) {
     vapply(hdr_items, function(kv) as.character(kv[[2]]), character(1)),
     vapply(hdr_items, function(kv) as.character(kv[[1]]), character(1))
   )
-  cat("\n--- Query:", prompt, "---\n")
+  cat("\nQ: ")
+  pretty_print(prompt, width = 79)
   r <- POST(url, add_headers(.headers = h), body = payload, encode = "raw", timeout(120))
-  cat(substr(content(r, "text", encoding = "UTF-8"), 1, 2000), "\n")
+  raw_txt <- content(r, "text", encoding = "UTF-8")
+  lines <- unlist(strsplit(raw_txt, "\n", fixed = TRUE))
+  parts <- character(0)
+  for (ln in lines) {
+    ln <- trimws(ln)
+    if (!startsWith(ln, "data:")) next
+    payload_json <- sub("^data:\\s*", "", ln)
+    evt <- tryCatch(fromJSON(payload_json), error = function(e) NULL)
+    if (is.null(evt)) next
+    if (!is.null(evt$error)) {
+      parts <- c(parts, paste0("Error: ", as.character(evt$error)))
+      next
+    }
+    if (!is.null(evt$event)) parts <- c(parts, event_text(evt$event))
+  }
+  answer <- trimws(paste(parts, collapse = " "))
+  cat("A: ")
+  pretty_print(answer, width = 79)
   rt
 }
 
