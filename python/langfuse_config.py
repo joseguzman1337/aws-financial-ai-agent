@@ -1,7 +1,6 @@
 """Langfuse runtime configuration helpers with SSM fallback."""
 
 import os
-from functools import lru_cache
 
 import boto3
 
@@ -13,7 +12,6 @@ def _get_ssm(name: str, region: str) -> str:
     )
 
 
-@lru_cache(maxsize=1)
 def ensure_langfuse_env() -> bool:
     """
     Ensures Langfuse env vars are available.

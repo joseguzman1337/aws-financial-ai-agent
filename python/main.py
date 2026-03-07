@@ -57,7 +57,6 @@ async def invoke_agent(request: Request):
         callbacks = []
         if langfuse_enabled:
             langfuse_handler = CallbackHandler(
-                trace_name="financial-ai-agent-invocation",
                 trace_context={"trace_id": session_id},
             )
             callbacks = [langfuse_handler]

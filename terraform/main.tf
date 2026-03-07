@@ -456,7 +456,7 @@ resource "aws_bedrockagentcore_agent_runtime" "financial_agent_runtime" {
 
   agent_runtime_artifact {
     container_configuration {
-      container_uri = "${aws_ecr_repository.agent_repo.repository_url}:v8"
+      container_uri = "${aws_ecr_repository.agent_repo.repository_url}:v10"
     }
   }
 
