@@ -659,6 +659,29 @@ class NotebookRuntimeCore:
                 timeout=30,
             )
 
+        def _pick_metric(
+            row: dict[str, Any],
+            measure: str,
+            aggregation: str,
+        ) -> Any:
+            """Best-effort metric value extraction across API key naming variants."""
+            direct = [
+                f"{aggregation}_{measure}",
+                f"{measure}_{aggregation}",
+                f"{aggregation}{measure[0].upper()}{measure[1:]}",
+                measure,
+            ]
+            for k in direct:
+                if k in row and row[k] is not None:
+                    return row[k]
+            m = measure.lower()
+            a = aggregation.lower()
+            for k, v in row.items():
+                lk = str(k).lower()
+                if m in lk and a in lk and v is not None:
+                    return v
+            return None
+
         auth = _probe("/api/public/projects")
         if auth.status_code == 200:
             print("Langfuse auth: 200 OK")
@@ -785,6 +808,23 @@ class NotebookRuntimeCore:
                                     )
                     else:
                         print(f"Langfuse trace detail: HTTP {detail.status_code}")
+            else:
+                # Helpful fallback when sessionId has not propagated yet.
+                recent = _probe("/api/public/traces", {"limit": 3})
+                if recent.status_code == 200:
+                    rdata = recent.json().get("data", [])
+                    if rdata:
+                        print("Langfuse recent traces fallback:")
+                        for idx, t in enumerate(rdata[:3], start=1):
+                            print(
+                                "  [{}] id={} name={} sessionId={} ts={}".format(
+                                    idx,
+                                    t.get("id", "n/a"),
+                                    t.get("name", "n/a"),
+                                    t.get("sessionId", "n/a"),
+                                    t.get("timestamp", "n/a"),
+                                )
+                            )
         else:
             print(f"Langfuse traces: HTTP {traces.status_code}")
 
@@ -813,11 +853,14 @@ class NotebookRuntimeCore:
                 print(f"Langfuse metrics(v2): 200 OK rows={len(rows)}")
                 if rows:
                     first = rows[0]
+                    obs_count = _pick_metric(first, "count", "count")
+                    p95_lat = _pick_metric(first, "latency", "p95")
+                    tot_tokens = _pick_metric(first, "totalTokens", "sum")
+                    tot_cost = _pick_metric(first, "totalCost", "sum")
                     print(
-                        "Langfuse metrics sample: " + ", ".join(
-                            f"{k}={first.get(k)}"
-                            for k in sorted(first.keys())[:8]
-                        )
+                        "Langfuse metrics summary (24h): "
+                        f"observations={obs_count} p95_latency_ms={p95_lat} "
+                        f"total_tokens={tot_tokens} total_cost_usd={tot_cost}"
                     )
             else:
                 print(f"Langfuse metrics(v2): HTTP {m.status_code}")
@@ -841,9 +884,15 @@ class NotebookRuntimeCore:
                 drows = m_daily.json().get("data", [])
                 print(f"Langfuse daily cost(v2): 200 OK rows={len(drows)}")
                 for r in drows[:7]:
-                    day = r.get("timestampDay") or r.get("date") or "n/a"
-                    cost = r.get("totalCost", "n/a")
-                    print(f"  - day={day} totalCost={cost}")
+                    day = (
+                        r.get("timestampDay")
+                        or r.get("date")
+                        or r.get("time_bucket")
+                        or r.get("timeBucket")
+                        or "n/a"
+                    )
+                    cost = _pick_metric(r, "totalCost", "sum")
+                    print(f"  - day={day} total_cost_usd={cost}")
             else:
                 print(f"Langfuse daily cost(v2): HTTP {m_daily.status_code}")
 
@@ -866,10 +915,17 @@ class NotebookRuntimeCore:
                 mrows = m_model.json().get("data", [])
                 print(f"Langfuse cost by model(v2): 200 OK rows={len(mrows)}")
                 for r in mrows[:10]:
-                    model = r.get("providedModelName", "n/a")
-                    cost = r.get("totalCost", "n/a")
-                    count = r.get("count", "n/a")
-                    print(f"  - model={model} totalCost={cost} count={count}")
+                    model = (
+                        r.get("providedModelName")
+                        or r.get("observationModelName")
+                        or r.get("model")
+                        or "n/a"
+                    )
+                    cost = _pick_metric(r, "totalCost", "sum")
+                    count = _pick_metric(r, "count", "count")
+                    print(
+                        f"  - model={model} total_cost_usd={cost} observations={count}"
+                    )
             else:
                 print(f"Langfuse cost by model(v2): HTTP {m_model.status_code}")
         except Exception as e:
@@ -890,6 +946,14 @@ class NotebookRuntimeCore:
                 "traces": traces.json().get("data", [])
                 if traces.status_code == 200
                 else [],
+                "capabilityHttp": cap_results,
+                "metrics24h": m.json() if "m" in locals() and m.status_code == 200 else {},
+                "metricsDaily": m_daily.json()
+                if "m_daily" in locals() and m_daily.status_code == 200
+                else {},
+                "metricsByModel": m_model.json()
+                if "m_model" in locals() and m_model.status_code == 200
+                else {},
             }
             out_dir = Path("artifacts") / "langfuse"
             out_dir.mkdir(parents=True, exist_ok=True)
