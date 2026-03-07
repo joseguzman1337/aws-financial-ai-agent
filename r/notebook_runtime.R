@@ -70,9 +70,17 @@ query_agent <- function(rt, prompt) {
 }
 
 verify_observability <- function(rt) {
-  # Print loaded Python runtime version to detect stale notebook state.
-  v <- tryCatch(rt$core$RUNTIME_VERSION, error = function(e) "unknown")
+  # Always rebuild runtime from latest downloaded Python file to avoid stale
+  # `rt$core` objects lingering in notebook state.
+  cfg <- tryCatch(rt$core$cfg, error = function(e) default_cfg)
+  params <- tryCatch(rt$core$params, error = function(e) default_params)
+  latest_rt <- runtime_init(cfg = cfg, params = params)
+  latest_rt <- refresh_clients(latest_rt)
+  v <- tryCatch(
+    latest_rt$core$RUNTIME_VERSION,
+    error = function(e) "unknown"
+  )
   cat(sprintf("Notebook runtime (R bridge): %s\n", as.character(v)))
-  rt$core$verify_observability()
-  rt
+  latest_rt$core$verify_observability()
+  latest_rt
 }
