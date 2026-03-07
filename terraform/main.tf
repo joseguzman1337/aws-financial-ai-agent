@@ -95,6 +95,17 @@ resource "aws_iam_role_policy" "cognito_guest_ssm_policy" {
         ]
         Effect   = "Allow"
         Resource = "*"
+      },
+      {
+        Sid = "AllowGuestInvokeAgentRuntime"
+        Action = [
+          "bedrock-agentcore:InvokeAgentRuntime"
+        ]
+        Effect = "Allow"
+        Resource = [
+          aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn,
+          "${aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn}/runtime-endpoint/*"
+        ]
       }
     ]
   })
@@ -158,12 +169,6 @@ resource "aws_cognito_identity_pool_roles_attachment" "main" {
   roles = {
     authenticated   = aws_iam_role.cognito_authenticated_role.arn
     unauthenticated = aws_iam_role.cognito_unauthenticated_role.arn
-  }
-
-  role_mapping {
-    identity_provider         = "${aws_cognito_user_pool.financial_agent_pool.endpoint}:${aws_cognito_user_pool_client.financial_agent_client.id}"
-    ambiguous_role_resolution = "AuthenticatedRole"
-    type                      = "Token"
   }
 }
 
