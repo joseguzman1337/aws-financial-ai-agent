@@ -246,6 +246,9 @@ class NotebookRuntimeCore:
 .af-body pre{background:#0e1116;color:#f5f5f5;padding:.6rem;border-radius:10px;overflow:auto}
 .af-body table{border-collapse:collapse;width:auto;max-width:100%}
 .af-body th,.af-body td{border:1px solid #46505f;padding:.35rem .5rem;text-align:left}
+.af-sub{max-width:79ch;margin:.2rem 0 .5rem 0;background:#0b111a;border:1px solid #2f3d52;border-radius:12px;padding:.55rem .7rem;color:#f5f7fa;box-shadow:0 1px 6px rgba(0,0,0,.24)}
+.af-sub-title{font-weight:700;font-size:.78rem;letter-spacing:.02em;color:#9fc3ff;margin-bottom:.25rem}
+.af-sub-body{white-space:pre-wrap;word-wrap:break-word;color:#f5f7fa}
 </style>
 """
             display(HTML(css))
@@ -269,6 +272,23 @@ class NotebookRuntimeCore:
         html = (
             f"<div class='af-chat'><div class='af-msg {cls}'>"
             f"<div class='af-label'>{label}</div>{body_html}</div></div>"
+        )
+        display(HTML(html))
+
+    def _render_sub_box(self, title: str, body: str) -> None:
+        """Render left-justified dark metadata/tokens box per Q/A combo."""
+        try:
+            from IPython.display import HTML, display  # type: ignore
+        except Exception:
+            print(f"{title}: {self._wrap(body)}")
+            return
+        safe_title = escape(title or "")
+        safe_body = escape(body or "")
+        html = (
+            "<div class='af-chat'><div class='af-sub'>"
+            f"<div class='af-sub-title'>{safe_title}</div>"
+            f"<div class='af-sub-body'>{safe_body}</div>"
+            "</div></div>"
         )
         display(HTML(html))
 
@@ -302,13 +322,12 @@ class NotebookRuntimeCore:
             timeout=120,
             stream=True,
         )
-        print(
-            "AgentCore metadata: runtimeSessionId={} statusCode={} contentType={}".format(
-                self.session_id,
-                resp.status_code,
-                resp.headers.get("Content-Type", "unknown"),
+        meta_text = (
+            "runtimeSessionId={} statusCode={} contentType={}".format(
+                self.session_id, resp.status_code, resp.headers.get("Content-Type", "unknown")
             )
         )
+        self._render_sub_box("AgentCore metadata", meta_text)
         request_id = resp.headers.get("x-amzn-requestid") or resp.headers.get(
             "X-Amzn-RequestId"
         )
@@ -385,25 +404,12 @@ class NotebookRuntimeCore:
                 token_usage["output"]
             )
         if any(v is not None for v in token_usage.values()):
-            print(
-                "Tokens: input={} output={} total={}".format(
-                    (
-                        token_usage["input"]
-                        if token_usage["input"] is not None
-                        else "n/a"
-                    ),
-                    (
-                        token_usage["output"]
-                        if token_usage["output"] is not None
-                        else "n/a"
-                    ),
-                    (
-                        token_usage["total"]
-                        if token_usage["total"] is not None
-                        else "n/a"
-                    ),
-                )
+            tok_text = "input={} output={} total={}".format(
+                token_usage["input"] if token_usage["input"] is not None else "n/a",
+                token_usage["output"] if token_usage["output"] is not None else "n/a",
+                token_usage["total"] if token_usage["total"] is not None else "n/a",
             )
+            self._render_sub_box("Token usage", tok_text)
         else:
             # AgentCore stream currently omits usage; fallback to Bedrock CountTokens.
             est_in, err_in = self._count_tokens_text(prompt, role="user")
@@ -414,19 +420,16 @@ class NotebookRuntimeCore:
             )
             if est_in is not None or est_out is not None:
                 est_total = (est_in or 0) + (est_out or 0)
-                print(
-                    "Tokens: input={} output={} total={} (source=bedrock:CountTokens estimate)".format(
+                tok_text = (
+                    "input={} output={} total={} source=bedrock:CountTokens estimate".format(
                         est_in if est_in is not None else "n/a",
                         est_out if est_out is not None else "n/a",
-                        (
-                            est_total
-                            if (est_in is not None or est_out is not None)
-                            else "n/a"
-                        ),
+                        est_total if (est_in is not None or est_out is not None) else "n/a",
                     )
                 )
+                self._render_sub_box("Token usage", tok_text)
             else:
-                print("Tokens: usage coming soon")
+                self._render_sub_box("Token usage", "usage coming soon")
         if (not self.model_logged) and model_info:
             print(f"Model: {model_info}")
             self.model_logged = True
