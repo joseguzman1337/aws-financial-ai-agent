@@ -499,8 +499,9 @@ class NotebookRuntimeCore:
                     limit=100,
                 )
             except Exception as e:
-                print(
-                    f"Invocation metrics (real-time logs): unavailable ({e})"
+                self._render_sub_box(
+                    "Invocation metrics (real-time logs)",
+                    f"unavailable ({e})",
                 )
                 return
             events = resp.get("events", [])
@@ -519,16 +520,20 @@ class NotebookRuntimeCore:
             if found:
                 break
         if not found:
-            print("Invocation metrics (real-time logs): not available yet")
+            self._render_sub_box(
+                "Invocation metrics (real-time logs)",
+                "not available yet",
+            )
             return
-        print(
-            "Invocation metrics (real-time logs): requestId={} modelId={} inputTokens={} outputTokens={} latencyMs={}".format(
+        self._render_sub_box(
+            "Invocation metrics (real-time logs)",
+            "requestId={} modelId={} inputTokens={} outputTokens={} latencyMs={}".format(
                 found.get("requestId", "n/a"),
                 found.get("modelId", "n/a"),
                 found.get("inputTokenCount", "n/a"),
                 found.get("outputTokenCount", "n/a"),
                 found.get("invocationLatency", "n/a"),
-            )
+            ),
         )
 
     @staticmethod
