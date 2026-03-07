@@ -622,5 +622,20 @@ class NotebookRuntimeCore:
                     self.session_id, len(data)
                 )
             )
+            if data:
+                print("Langfuse trace preview:")
+                for idx, t in enumerate(data[:3], start=1):
+                    print(
+                        "  [{}] id={} name={} sessionId={} ts={}".format(
+                            idx,
+                            t.get("id", "n/a"),
+                            t.get("name", "n/a"),
+                            t.get("sessionId", "n/a"),
+                            t.get("timestamp", "n/a"),
+                        )
+                    )
+                pretty = json.dumps(data[0], indent=2)[:2500]
+                print("Langfuse latest trace (beautified JSON):")
+                print(self._wrap(pretty, width=79))
         else:
             print(f"Langfuse traces: HTTP {traces.status_code}")
