@@ -13,6 +13,9 @@ if [ ! -f .coderabbit.yaml ]; then
     exit 1
 fi
 
+# R language quality gate (syntax + styler auto-fix + lintr)
+sh scripts/r_quality.sh
+
 pre-commit run trailing-whitespace
 pre-commit run end-of-file-fixer
 pre-commit run check-yaml
