@@ -191,6 +191,13 @@ class NotebookRuntimeCore:
 
         print(f"\nQ: {self._wrap(prompt)}")
         resp = requests.post(self.agentcore_url, headers=headers, data=payload, timeout=120, stream=True)
+        print(
+            "AgentCore metadata: runtimeSessionId={} statusCode={} contentType={}".format(
+                self.session_id,
+                resp.status_code,
+                resp.headers.get("Content-Type", "unknown"),
+            )
+        )
 
         model_info = None
         token_usage: dict[str, int | None] = {"input": None, "output": None, "total": None}

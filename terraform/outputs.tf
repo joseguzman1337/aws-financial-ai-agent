@@ -18,6 +18,11 @@ output "agent_runtime_arn" {
   value       = aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn
 }
 
+output "agent_runtime_id" {
+  description = "The AgentCore runtime identifier extracted from the runtime ARN."
+  value       = element(split("/", aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn), 1)
+}
+
 output "s3_bucket_name" {
   description = "The name of the S3 bucket where financial docs are stored."
   value       = aws_s3_bucket.financial_docs.id
