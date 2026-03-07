@@ -627,18 +627,35 @@ class NotebookRuntimeCore:
             print(f"Langfuse auth: HTTP {auth.status_code}")
             return
 
-        # Capability probe matrix (checks what endpoints/shape are available).
+        # Capability probe matrix (schema-driven where possible).
         print("Langfuse capability check:")
-        capability_checks = [
+        schema_paths = self._load_langfuse_openapi_paths()
+        if schema_paths:
+            print(
+                "Langfuse OpenAPI loaded: paths={}".format(len(schema_paths))
+            )
+        else:
+            print("Langfuse OpenAPI unavailable: using fallback probe set")
+
+        wanted_checks = [
             ("traces.list", "/api/public/traces", {"limit": 1}),
             (
                 "traces.by_session",
                 "/api/public/traces",
                 {"sessionId": self.session_id, "limit": 5},
             ),
+            ("observations.list", "/api/public/observations", {"limit": 1}),
             ("sessions.list", "/api/public/sessions", {"limit": 1}),
             ("models.list", "/api/public/models", {"limit": 1}),
-            ("metrics.daily", "/api/public/metrics/daily", {}),
+            ("metrics.v2", "/api/public/v2/metrics", {"limit": 1}),
+            ("prompts.list", "/api/public/v2/prompts", {"limit": 1}),
+            ("datasets.list", "/api/public/v2/datasets", {"limit": 1}),
+            ("score.create", "/api/public/scores", {}),
+        ]
+        capability_checks = [
+            (n, p, q)
+            for (n, p, q) in wanted_checks
+            if (not schema_paths) or (p in schema_paths)
         ]
         cap_results: dict[str, int] = {}
         for cap_name, cap_path, cap_params in capability_checks:
@@ -723,3 +740,36 @@ class NotebookRuntimeCore:
                         print(f"Langfuse trace detail: HTTP {detail.status_code}")
         else:
             print(f"Langfuse traces: HTTP {traces.status_code}")
+
+    def _load_langfuse_openapi_paths(self) -> set[str]:
+        """Fetch Langfuse OpenAPI YAML and extract path keys."""
+        urls = [
+            "https://cloud.langfuse.com/generated/api/openapi.yml",
+            "https://us.cloud.langfuse.com/generated/api/openapi.yml",
+        ]
+        txt = ""
+        for u in urls:
+            try:
+                r = requests.get(u, timeout=30)
+                if r.status_code == 200 and "openapi:" in r.text:
+                    txt = r.text
+                    break
+            except Exception:
+                continue
+        if not txt:
+            return set()
+        paths: set[str] = set()
+        in_paths = False
+        for line in txt.splitlines():
+            if line.strip() == "paths:":
+                in_paths = True
+                continue
+            if not in_paths:
+                continue
+            if not line.startswith("  "):
+                # end of paths section
+                break
+            m = re.match(r"^\s{2}(/api/public[^\s:]*):\s*$", line)
+            if m:
+                paths.add(m.group(1))
+        return paths

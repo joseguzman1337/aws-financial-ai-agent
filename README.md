@@ -112,6 +112,17 @@ bash .husky/pre-commit
 ```
 </details>
 
+<details>
+<summary><b>Langfuse API Schema</b></summary>
+
+- OpenAPI spec is vendored at `docs/langfuse/openapi.yml`.
+- Refresh with:
+  ```bash
+  ./scripts/fetch_langfuse_openapi.sh
+  ```
+- Notebook observability now performs schema-driven capability checks before probing endpoints.
+</details>
+
 ---
 
 ## 📖 Wiki & Live Verification Guide
