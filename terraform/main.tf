@@ -143,6 +143,19 @@ resource "aws_iam_role_policy" "cognito_guest_ssm_policy" {
         ]
       },
       {
+        Sid = "AllowGuestReadInvocationLogs"
+        Action = [
+          "logs:FilterLogEvents",
+          "logs:GetLogEvents",
+          "logs:DescribeLogStreams"
+        ]
+        Effect = "Allow"
+        Resource = [
+          aws_cloudwatch_log_group.bedrock_model_invocation_logs.arn,
+          "${aws_cloudwatch_log_group.bedrock_model_invocation_logs.arn}:*"
+        ]
+      },
+      {
         Sid = "AllowGuestCountTokens"
         Action = [
           "bedrock:CountTokens"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 import urllib.parse
@@ -28,6 +29,7 @@ class NotebookRuntimeCore:
             "unauth_role_arn": "arn:aws:iam::162187491349:role/cognito_unauthenticated_role",
             "credential_refresh_seconds": 45 * 60,
             "model_id": "us.anthropic.claude-opus-4-6-v1",
+            "invocation_log_group": "/aws/bedrock/model-invocations/Financial_Analyst_Agent",
             **(cfg or {}),
         }
         self.params = {
@@ -58,6 +60,7 @@ class NotebookRuntimeCore:
             )
         self.sts = boto3.client("sts", **kw)
         self.ssm = boto3.client("ssm", **kw)
+        self.logs = boto3.client("logs", **kw)
 
     def bootstrap_guest(self) -> None:
         idc = boto3.client(
@@ -198,6 +201,7 @@ class NotebookRuntimeCore:
                 resp.headers.get("Content-Type", "unknown"),
             )
         )
+        request_id = resp.headers.get("x-amzn-requestid") or resp.headers.get("X-Amzn-RequestId")
 
         model_info = None
         token_usage: dict[str, int | None] = {"input": None, "output": None, "total": None}
@@ -283,6 +287,88 @@ class NotebookRuntimeCore:
         if (not self.model_logged) and model_info:
             print(f"Model: {model_info}")
             self.model_logged = True
+        self._print_realtime_invocation_metrics(request_id=request_id, session_id=self.session_id)
+
+    def _print_realtime_invocation_metrics(self, request_id: str | None, session_id: str) -> None:
+        """Poll CloudWatch Bedrock invocation logs and print parsed metrics as soon as available."""
+        group = self.cfg.get("invocation_log_group")
+        if not group:
+            return
+        start_ms = int((time.time() - 120) * 1000)
+        found: dict[str, Any] | None = None
+        for wait_s in (1, 2, 4, 6):
+            time.sleep(wait_s)
+            try:
+                # Use a broad fetch window then local matching because log field names vary.
+                resp = self.logs.filter_log_events(
+                    logGroupName=group,
+                    startTime=start_ms,
+                    interleaved=True,
+                    limit=100,
+                )
+            except Exception as e:
+                print(f"Invocation metrics (real-time logs): unavailable ({e})")
+                return
+            events = resp.get("events", [])
+            for ev in reversed(events):
+                msg = ev.get("message", "")
+                if request_id and request_id not in msg and session_id not in msg:
+                    continue
+                parsed = self._extract_invocation_metrics_from_log_message(msg)
+                if parsed:
+                    found = parsed
+                    break
+            if found:
+                break
+        if not found:
+            print("Invocation metrics (real-time logs): not available yet")
+            return
+        print(
+            "Invocation metrics (real-time logs): requestId={} modelId={} inputTokens={} outputTokens={} latencyMs={}".format(
+                found.get("requestId", "n/a"),
+                found.get("modelId", "n/a"),
+                found.get("inputTokenCount", "n/a"),
+                found.get("outputTokenCount", "n/a"),
+                found.get("invocationLatency", "n/a"),
+            )
+        )
+
+    @staticmethod
+    def _extract_invocation_metrics_from_log_message(message: str) -> dict[str, Any] | None:
+        # Try JSON first.
+        try:
+            js = json.loads(message)
+            def pick(*keys):
+                for k in keys:
+                    if k in js and js[k] is not None:
+                        return js[k]
+                return None
+            out = {
+                "requestId": pick("requestId", "RequestId", "requestID"),
+                "modelId": pick("modelId", "ModelId"),
+                "inputTokenCount": pick("inputTokenCount", "InputTokenCount"),
+                "outputTokenCount": pick("outputTokenCount", "OutputTokenCount"),
+                "invocationLatency": pick("invocationLatency", "InvocationLatency", "latencyMs"),
+            }
+            if any(v is not None for v in out.values()):
+                return out
+        except Exception:
+            pass
+
+        # Fallback regex parse for plain text log lines.
+        patterns = {
+            "requestId": r"(?:requestId|RequestId)[=:\\s\"]+([A-Za-z0-9-]{8,})",
+            "modelId": r"(?:modelId|ModelId)[=:\\s\"]+([A-Za-z0-9._:-]+)",
+            "inputTokenCount": r"(?:inputTokenCount|InputTokenCount)[=:\\s\"]+([0-9]+)",
+            "outputTokenCount": r"(?:outputTokenCount|OutputTokenCount)[=:\\s\"]+([0-9]+)",
+            "invocationLatency": r"(?:invocationLatency|InvocationLatency|latencyMs)[=:\\s\"]+([0-9]+)",
+        }
+        out: dict[str, Any] = {}
+        for k, pat in patterns.items():
+            m = re.search(pat, message)
+            if m:
+                out[k] = int(m.group(1)) if k in ("inputTokenCount", "outputTokenCount", "invocationLatency") else m.group(1)
+        return out or None
 
     def _count_tokens_text(self, text: str, role: str) -> tuple[int | None, str | None]:
         try:
