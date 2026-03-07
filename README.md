@@ -128,6 +128,21 @@ bash .husky/pre-commit
   Outputs are written to `artifacts/langfuse/`.
 </details>
 
+<details>
+<summary><b>LiteLLM Custom Callbacks (Optional)</b></summary>
+
+- Additive callback integration is available in:
+  - `python/litellm_custom_callbacks.py`
+- Enable it where LiteLLM is used:
+  ```python
+  from litellm_custom_callbacks import register_litellm_callbacks
+
+  register_litellm_callbacks()
+  ```
+- Callback events are written to:
+  - `artifacts/litellm/litellm_callbacks_YYYYMMDD.jsonl`
+</details>
+
 ---
 
 ## 📖 Wiki & Live Verification Guide
