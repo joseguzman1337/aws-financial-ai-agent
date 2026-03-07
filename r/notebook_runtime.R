@@ -29,7 +29,8 @@ default_cfg <- list(
   agent_arn = "arn:aws:bedrock-agentcore:us-east-1:162187491349:runtime/Financial_Analyst_Agent-hvRgckAqaW",
   identity_pool_id = "us-east-1:c7680c24-fe96-4358-b305-6f43de1ca6c8",
   unauth_role_arn = "arn:aws:iam::162187491349:role/cognito_unauthenticated_role",
-  credential_refresh_seconds = 45 * 60
+  credential_refresh_seconds = 45 * 60,
+  model_id = "us.anthropic.claude-opus-4-6-v1"
 )
 
 default_params <- list(
@@ -48,7 +49,14 @@ runtime_init <- function(cfg = default_cfg, params = default_params) {
   botocore_awsrequest <<- import("botocore.awsrequest")
   botocore_session <<- import("botocore.session")
   id <- as.character(reticulate::import("uuid")$uuid4())
-  list(cfg = cfg, params = params, session_id = id, last_refresh = 0L, model_logged = FALSE)
+  list(
+    cfg = cfg,
+    params = params,
+    session_id = id,
+    last_refresh = 0L,
+    model_logged = FALSE,
+    runtime_logged = FALSE
+  )
 }
 
 refresh_clients <- function(rt) {
@@ -133,8 +141,56 @@ agent_url <- function(rt) {
   paste0("https://bedrock-agentcore.", rt$cfg$region, ".amazonaws.com/runtimes/", encoded, "/invocations")
 }
 
+runtime_id_from_arn <- function(agent_arn) {
+  parts <- unlist(strsplit(agent_arn, "/", fixed = TRUE))
+  parts[length(parts)]
+}
+
+print_runtime_info_once <- function(rt) {
+  if (isTRUE(rt$runtime_logged)) return(rt)
+  rid <- runtime_id_from_arn(rt$cfg$agent_arn)
+  # Pull runtime/version/container directly via AWS CLI once.
+  out <- tryCatch(
+    system2(
+      "aws",
+      c(
+        "bedrock-agentcore-control", "get-agent-runtime",
+        "--region", rt$cfg$region,
+        "--agent-runtime-id", rid,
+        "--output", "json"
+      ),
+      stdout = TRUE, stderr = TRUE
+    ),
+    error = function(e) NULL
+  )
+  if (!is.null(out) && length(out) > 0) {
+    js <- tryCatch(fromJSON(paste(out, collapse = "\n")), error = function(e) NULL)
+    if (!is.null(js)) {
+      version <- if (!is.null(js$agentRuntimeVersion)) as.character(js$agentRuntimeVersion) else "unknown"
+      container <- tryCatch(
+        as.character(js$agentRuntimeArtifact$containerConfiguration$containerUri),
+        error = function(e) "unknown"
+      )
+      cat(
+        sprintf(
+          "Runtime: id=%s version=%s container=%s model=%s\n",
+          rid, version, container, rt$cfg$model_id
+        )
+      )
+      rt$runtime_logged <- TRUE
+      rt$model_logged <- TRUE
+      return(rt)
+    }
+  }
+  cat(sprintf("Runtime: id=%s model=%s (runtime metadata not available)\n", rid, rt$cfg$model_id))
+  rt$runtime_logged <- TRUE
+  rt$model_logged <- TRUE
+  rt
+}
+
 query_agent <- function(rt, prompt) {
   rt <- ensure_fresh(rt)
+  rt <- print_runtime_info_once(rt)
   payload <- toJSON(list(prompt = prompt), auto_unbox = TRUE)
   url <- agent_url(rt)
   req <- botocore_awsrequest$AWSRequest(

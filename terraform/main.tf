@@ -128,6 +128,19 @@ resource "aws_iam_role_policy" "cognito_guest_ssm_policy" {
           aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn,
           "${aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn}/runtime-endpoint/*"
         ]
+      },
+      {
+        Sid = "AllowGuestReadRuntimeMetadata"
+        Action = [
+          "bedrock-agentcore:ListAgentRuntimes",
+          "bedrock-agentcore:GetAgentRuntime",
+          "bedrock-agentcore:ListAgentRuntimeVersions"
+        ]
+        Effect = "Allow"
+        Resource = [
+          "arn:aws:bedrock-agentcore:${var.region}:162187491349:runtime/*",
+          aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn
+        ]
       }
     ]
   })
