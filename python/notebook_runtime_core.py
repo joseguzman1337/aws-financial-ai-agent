@@ -606,6 +606,14 @@ class NotebookRuntimeCore:
         )
         if auth.status_code == 200:
             print("Langfuse auth: 200 OK")
+            projects = auth.json().get("data", [])
+            if projects:
+                p = projects[0]
+                print(
+                    "Langfuse project: id={} name={}".format(
+                        p.get("id", "n/a"), p.get("name", "n/a")
+                    )
+                )
         else:
             print(f"Langfuse auth: HTTP {auth.status_code}")
             return
@@ -623,6 +631,9 @@ class NotebookRuntimeCore:
                 )
             )
             if data:
+                # Discover what this Langfuse project currently returns.
+                trace_keys = sorted(list(data[0].keys()))
+                print(f"Langfuse available trace fields: {', '.join(trace_keys)}")
                 print("Langfuse trace preview:")
                 for idx, t in enumerate(data[:3], start=1):
                     print(
@@ -637,5 +648,32 @@ class NotebookRuntimeCore:
                 pretty = json.dumps(data[0], indent=2)[:2500]
                 print("Langfuse latest trace (beautified JSON):")
                 print(self._wrap(pretty, width=79))
+                trace_id = data[0].get("id")
+                if trace_id:
+                    detail = requests.get(
+                        f"{base}/api/public/traces/{trace_id}",
+                        auth=(pk, sk),
+                        timeout=30,
+                    )
+                    if detail.status_code == 200:
+                        detail_obj = detail.json()
+                        detail_data = detail_obj.get("data", detail_obj)
+                        if isinstance(detail_data, dict):
+                            dkeys = sorted(list(detail_data.keys()))
+                            print(
+                                "Langfuse available trace-detail fields: "
+                                + ", ".join(dkeys)
+                            )
+                            obs = detail_data.get("observations")
+                            if isinstance(obs, list):
+                                print(f"Langfuse observations: count={len(obs)}")
+                                if obs:
+                                    okeys = sorted(list(obs[0].keys()))
+                                    print(
+                                        "Langfuse available observation fields: "
+                                        + ", ".join(okeys)
+                                    )
+                    else:
+                        print(f"Langfuse trace detail: HTTP {detail.status_code}")
         else:
             print(f"Langfuse traces: HTTP {traces.status_code}")
