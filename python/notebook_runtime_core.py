@@ -237,10 +237,11 @@ class NotebookRuntimeCore:
 <style>
 .af-chat{display:flex;flex-direction:column;gap:.55rem;margin:.4rem 0 1rem 0;font-family:ui-sans-serif,system-ui}
 .af-msg{max-width:79ch;border-radius:14px;padding:.7rem .85rem;line-height:1.4;box-shadow:0 1px 6px rgba(0,0,0,.28);overflow:auto;color:#f5f7fa}
-.af-q{margin-right:auto;background:#11263b;border:1px solid #2e4a67}
-.af-a{margin-right:auto;background:#1d1f24;border:1px solid #3b3f47}
+.af-q{margin-right:auto;background:#0f1722;border:1px solid #2f3d52}
+.af-a{margin-right:auto;background:#0f1722;border:1px solid #2f3d52}
 .af-label{font-weight:700;font-size:.8rem;letter-spacing:.02em;opacity:.9;margin-bottom:.35rem;color:#b9d2ff}
 .af-body{white-space:pre-wrap;word-wrap:break-word;color:#f5f7fa}
+.af-body *{color:#f5f7fa !important}
 .af-body pre,.af-body code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .af-body pre{background:#0e1116;color:#f5f5f5;padding:.6rem;border-radius:10px;overflow:auto}
 .af-body table{border-collapse:collapse;width:auto;max-width:100%}
