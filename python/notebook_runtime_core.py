@@ -265,10 +265,67 @@ class NotebookRuntimeCore:
                 )
             )
         else:
-            print("Tokens: not exposed by AgentCore response metadata")
+            # AgentCore stream currently omits usage; fallback to Bedrock CountTokens.
+            est_in, err_in = self._count_tokens_text(prompt, role="user")
+            est_out, err_out = self._count_tokens_text(answer, role="assistant") if answer else (None, None)
+            if est_in is not None or est_out is not None:
+                est_total = (est_in or 0) + (est_out or 0)
+                print(
+                    "Tokens: input={} output={} total={} (source=bedrock:CountTokens estimate)".format(
+                        est_in if est_in is not None else "n/a",
+                        est_out if est_out is not None else "n/a",
+                        est_total if (est_in is not None or est_out is not None) else "n/a",
+                    )
+                )
+            else:
+                reason = err_in or err_out or "unknown error"
+                print(f"Tokens: not exposed by AgentCore metadata; CountTokens unavailable ({reason})")
         if (not self.model_logged) and model_info:
             print(f"Model: {model_info}")
             self.model_logged = True
+
+    def _count_tokens_text(self, text: str, role: str) -> tuple[int | None, str | None]:
+        try:
+            req = {
+                "converse": {
+                    "messages": [
+                        {"role": role, "content": [{"text": text or ""}]},
+                    ]
+                }
+            }
+            env = os.environ.copy()
+            if self.credentials:
+                env["AWS_ACCESS_KEY_ID"] = self.credentials["AccessKeyId"]
+                env["AWS_SECRET_ACCESS_KEY"] = self.credentials["SecretAccessKey"]
+                env["AWS_SESSION_TOKEN"] = self.credentials["SessionToken"]
+            env["AWS_REGION"] = self.cfg["region"]
+            proc = subprocess.run(
+                [
+                    "aws",
+                    "bedrock-runtime",
+                    "count-tokens",
+                    "--region",
+                    self.cfg["region"],
+                    "--model-id",
+                    self.cfg["model_id"],
+                    "--input",
+                    json.dumps(req, separators=(",", ":")),
+                    "--output",
+                    "json",
+                ],
+                text=True,
+                env=env,
+                capture_output=True,
+            )
+            if proc.returncode != 0:
+                err = (proc.stderr or proc.stdout or "").strip()
+                return None, err.splitlines()[-1] if err else "CountTokens command failed"
+            resp = json.loads(proc.stdout)
+            if "inputTokens" in resp and resp["inputTokens"] is not None:
+                return int(resp["inputTokens"]), None
+        except Exception as e:
+            return None, str(e)
+        return None, "empty CountTokens response"
 
     def verify_observability(self) -> None:
         self.ensure_fresh()

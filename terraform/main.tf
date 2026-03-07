@@ -141,6 +141,17 @@ resource "aws_iam_role_policy" "cognito_guest_ssm_policy" {
           "arn:aws:bedrock-agentcore:${var.region}:162187491349:runtime/*",
           aws_bedrockagentcore_agent_runtime.financial_agent_runtime.agent_runtime_arn
         ]
+      },
+      {
+        Sid = "AllowGuestCountTokens"
+        Action = [
+          "bedrock:CountTokens"
+        ]
+        Effect = "Allow"
+        Resource = [
+          "arn:aws:bedrock:*:162187491349:inference-profile/*",
+          "arn:aws:bedrock:*::foundation-model/*"
+        ]
       }
     ]
   })
