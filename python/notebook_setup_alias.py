@@ -54,8 +54,17 @@ def aws_auth_phase_setup() -> dict:
     )
     from rpy2 import robjects
 
-    py_raw = "https://raw.githubusercontent.com/joseguzman1337/aws-financial-ai-agent/main/python/notebook_runtime_core.py"
-    r_raw = "https://raw.githubusercontent.com/joseguzman1337/aws-financial-ai-agent/main/r/notebook_runtime.R"
+    bust = str(int(__import__("time").time()))
+    py_raw = (
+        "https://raw.githubusercontent.com/joseguzman1337/"
+        "aws-financial-ai-agent/main/python/notebook_runtime_core.py"
+        f"?v={bust}"
+    )
+    r_raw = (
+        "https://raw.githubusercontent.com/joseguzman1337/"
+        "aws-financial-ai-agent/main/r/notebook_runtime.R"
+        f"?v={bust}"
+    )
     py_file = Path("/tmp/notebook_runtime_core.py")
     r_file = Path("/tmp/notebook_runtime.R")
     py_file.write_text(requests.get(py_raw, timeout=30).text, encoding="utf-8")
