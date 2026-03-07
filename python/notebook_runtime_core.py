@@ -370,10 +370,7 @@ class NotebookRuntimeCore:
                     )
                 )
             else:
-                reason = err_in or err_out or "unknown error"
-                print(
-                    f"Tokens: not exposed by AgentCore metadata; CountTokens unavailable ({reason})"
-                )
+                print("Tokens: usage coming soon")
         if (not self.model_logged) and model_info:
             print(f"Model: {model_info}")
             self.model_logged = True
