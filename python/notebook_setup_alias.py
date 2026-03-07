@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import warnings
+import hashlib
 from pathlib import Path
 
 import requests
@@ -67,8 +68,12 @@ def aws_auth_phase_setup() -> dict:
     )
     py_file = Path("/tmp/notebook_runtime_core.py")
     r_file = Path("/tmp/notebook_runtime.R")
-    py_file.write_text(requests.get(py_raw, timeout=30).text, encoding="utf-8")
-    r_file.write_text(requests.get(r_raw, timeout=30).text, encoding="utf-8")
+    py_txt = requests.get(py_raw, timeout=30).text
+    r_txt = requests.get(r_raw, timeout=30).text
+    py_file.write_text(py_txt, encoding="utf-8")
+    r_file.write_text(r_txt, encoding="utf-8")
+    py_hash = hashlib.sha256(py_txt.encode("utf-8")).hexdigest()[:12]
+    print(f"Runtime core loaded: /tmp/notebook_runtime_core.py sha256={py_hash}")
     os.environ["NOTEBOOK_RUNTIME_PY_FILE"] = str(py_file)
     os.environ["RETICULATE_PYTHON"] = sys.executable
 

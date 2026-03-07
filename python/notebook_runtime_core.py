@@ -26,6 +26,8 @@ from botocore.credentials import Credentials
 
 
 class NotebookRuntimeCore:
+    RUNTIME_VERSION = "2026-03-07-observability-v2"
+
     def __init__(
         self,
         cfg: dict[str, Any] | None = None,
@@ -644,6 +646,7 @@ class NotebookRuntimeCore:
         return None, "empty CountTokens response"
 
     def verify_observability(self) -> None:
+        print(f"Notebook runtime: {self.RUNTIME_VERSION}")
         self.ensure_fresh()
         pk = self.ssm_get(self.params["langfuse_pk"])
         sk = self.ssm_get(self.params["langfuse_sk"])
