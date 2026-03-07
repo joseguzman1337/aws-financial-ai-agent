@@ -11,6 +11,7 @@ import sys
 import time
 import urllib.parse
 import uuid
+from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any
 
@@ -740,6 +741,42 @@ class NotebookRuntimeCore:
                         print(f"Langfuse trace detail: HTTP {detail.status_code}")
         else:
             print(f"Langfuse traces: HTTP {traces.status_code}")
+
+        # Dashboard-like metrics snapshot (last 24h) via v2 metrics API.
+        try:
+            now = datetime.now(timezone.utc)
+            frm = now - timedelta(hours=24)
+            metrics_query = {
+                "view": "observations",
+                "metrics": [
+                    {"measure": "count", "aggregation": "count"},
+                    {"measure": "latency", "aggregation": "p95"},
+                    {"measure": "totalTokens", "aggregation": "sum"},
+                    {"measure": "totalCost", "aggregation": "sum"},
+                ],
+                "fromTimestamp": frm.isoformat().replace("+00:00", "Z"),
+                "toTimestamp": now.isoformat().replace("+00:00", "Z"),
+            }
+            m = _probe(
+                "/api/public/v2/metrics",
+                {"query": json.dumps(metrics_query, separators=(",", ":"))},
+            )
+            if m.status_code == 200:
+                m_js = m.json()
+                rows = m_js.get("data", [])
+                print(f"Langfuse metrics(v2): 200 OK rows={len(rows)}")
+                if rows:
+                    first = rows[0]
+                    print(
+                        "Langfuse metrics sample: " + ", ".join(
+                            f"{k}={first.get(k)}"
+                            for k in sorted(first.keys())[:8]
+                        )
+                    )
+            else:
+                print(f"Langfuse metrics(v2): HTTP {m.status_code}")
+        except Exception as e:
+            print(f"Langfuse metrics(v2): error ({e})")
 
     def _load_langfuse_openapi_paths(self) -> set[str]:
         """Fetch Langfuse OpenAPI YAML and extract path keys."""
