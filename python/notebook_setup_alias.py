@@ -14,7 +14,19 @@ import requests
 def aws_auth_phase_setup() -> dict:
     """Install deps, load GitHub runtimes, initialize R runtime state."""
     subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-q", "rpy2", "awscli", "markdown"],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-q",
+            "rpy2",
+            "awscli",
+            "markdown",
+            "boto3",
+            "botocore",
+            "requests",
+        ],
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
