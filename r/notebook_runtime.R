@@ -51,6 +51,10 @@ agent_url <- function(rt) {
   rt$core$agentcore_url
 }
 
+runtime_session_id <- function(rt) {
+  rt$core$session_id
+}
+
 print_runtime_info_once <- function(rt) {
   rt$core$print_runtime_info_once()
   rt
