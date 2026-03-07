@@ -44,7 +44,8 @@ resource "aws_cognito_identity_pool" "financial_agent_identity_pool" {
 }
 
 resource "aws_iam_role" "cognito_unauthenticated_role" {
-  name = "cognito_unauthenticated_role"
+  name                 = "cognito_unauthenticated_role"
+  max_session_duration = 43200
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
