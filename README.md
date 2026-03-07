@@ -121,6 +121,11 @@ bash .husky/pre-commit
   ./scripts/fetch_langfuse_openapi.sh
   ```
 - Notebook observability now performs schema-driven capability checks before probing endpoints.
+- Full passwordless R export (schema probe + flattened entities):
+  ```bash
+  ./scripts/langfuse_report.sh
+  ```
+  Outputs are written to `artifacts/langfuse/`.
 </details>
 
 ---
