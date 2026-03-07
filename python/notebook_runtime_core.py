@@ -604,4 +604,23 @@ class NotebookRuntimeCore:
         auth = requests.get(
             f"{base}/api/public/projects", auth=(pk, sk), timeout=30
         )
-        print(f"Langfuse auth status: {auth.status_code}")
+        if auth.status_code == 200:
+            print("Langfuse auth: 200 OK")
+        else:
+            print(f"Langfuse auth: HTTP {auth.status_code}")
+            return
+        traces = requests.get(
+            f"{base}/api/public/traces",
+            params={"sessionId": self.session_id, "limit": 5},
+            auth=(pk, sk),
+            timeout=30,
+        )
+        if traces.status_code == 200:
+            data = traces.json().get("data", [])
+            print(
+                "Langfuse traces: 200 OK (sessionId={} count={})".format(
+                    self.session_id, len(data)
+                )
+            )
+        else:
+            print(f"Langfuse traces: HTTP {traces.status_code}")
