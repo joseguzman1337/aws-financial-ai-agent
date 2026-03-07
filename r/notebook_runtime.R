@@ -70,6 +70,9 @@ query_agent <- function(rt, prompt) {
 }
 
 verify_observability <- function(rt) {
+  # Print loaded Python runtime version to detect stale notebook state.
+  v <- tryCatch(rt$core$RUNTIME_VERSION, error = function(e) "unknown")
+  cat(sprintf("Notebook runtime (R bridge): %s\n", as.character(v)))
   rt$core$verify_observability()
   rt
 }
