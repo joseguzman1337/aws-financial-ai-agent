@@ -88,6 +88,27 @@ resource "aws_iam_role_policy" "cognito_guest_ssm_policy" {
         Resource = aws_kms_key.app_secrets.arn
       },
       {
+        Sid = "AllowLangfuseObservabilityParams"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ]
+        Effect = "Allow"
+        Resource = [
+          "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/langfuse/public-key",
+          "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/langfuse/secret-key",
+          "arn:aws:ssm:${var.region}:162187491349:parameter/financial-ai/langfuse/base-url"
+        ]
+      },
+      {
+        Sid = "AllowCallerIdentityForNotebookChecks"
+        Action = [
+          "sts:GetCallerIdentity"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      },
+      {
         # Cognito Identity operations do not support resource-level permissions
         Action = [
           "cognito-identity:GetCredentialsForIdentity",
