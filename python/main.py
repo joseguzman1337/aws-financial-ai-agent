@@ -178,6 +178,25 @@ def _resolve_numeric_map(payload: dict, key: str) -> dict[str, float]:
     return out
 
 
+def _resolve_bool(payload: dict, request: Request, key: str, header: str) -> bool:
+    raw = payload.get(key)
+    if raw is None:
+        raw = request.headers.get(header)
+    if raw is None:
+        return False
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _resolve_trace_name(payload: dict, request: Request) -> str | None:
+    raw = payload.get("langfuse_trace_name") or request.headers.get(
+        "X-Langfuse-Trace-Name"
+    )
+    if raw is None:
+        return None
+    txt = str(raw).strip()
+    return txt[:120] if txt else None
+
+
 @app.on_event("shutdown")
 async def flush_langfuse():
     """Flush Langfuse events on graceful shutdown."""
@@ -216,6 +235,13 @@ async def invoke_agent(request: Request):
         version = _resolve_version(payload, request)
         usage_details = _resolve_numeric_map(payload, "langfuse_usage_details")
         cost_details = _resolve_numeric_map(payload, "langfuse_cost_details")
+        as_baggage = _resolve_bool(
+            payload,
+            request,
+            "langfuse_as_baggage",
+            "X-Langfuse-As-Baggage",
+        )
+        trace_name = _resolve_trace_name(payload, request)
         logger.info("Query: %s", query)
 
         langfuse_enabled = ensure_langfuse_env()
@@ -261,6 +287,8 @@ async def invoke_agent(request: Request):
                 "langfuse_version": version,
                 "langfuse_usage_keys": sorted(list(usage_details.keys())),
                 "langfuse_cost_keys": sorted(list(cost_details.keys())),
+                "langfuse_as_baggage": as_baggage,
+                "langfuse_trace_name": trace_name,
                 "agent_runtime": "Financial_Analyst_Agent",
                 "has_prompt": bool(query),
             },
@@ -287,6 +315,7 @@ async def invoke_agent(request: Request):
                             "trace_seed": external_trace_seed,
                             "tags": langfuse_tags,
                             "metadata": langfuse_metadata,
+                            "trace_name": trace_name,
                             "prompt": query,
                         },
                     ) as span:
@@ -297,6 +326,8 @@ async def invoke_agent(request: Request):
                             version=version,
                             tags=langfuse_tags,
                             metadata=langfuse_metadata,
+                            trace_name=trace_name,
+                            as_baggage=as_baggage,
                         ):
                             result = await get_agent_graph().ainvoke(
                                 agent_input, config=config
@@ -336,6 +367,12 @@ async def invoke_agent(request: Request):
                     except Exception:
                         pass
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            finally:
+                if langfuse_enabled:
+                    try:
+                        get_langfuse_client().flush()
+                    except Exception:
+                        pass
 
         return StreamingResponse(
             stream_generator(), media_type="text/event-stream"
