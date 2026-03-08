@@ -1151,6 +1151,40 @@ class NotebookRuntimeCore:
                                 _clean(_pick_metric(r2, "totalCost", "sum"), "0"),
                             )
                         )
+                # Immediate verification via observations endpoint (faster than metrics aggregation).
+                obs_seed = _probe(
+                    "/api/public/observations",
+                    {"name": "notebook-usage-cost-seed", "limit": 5, "page": 1},
+                )
+                if obs_seed.status_code == 200:
+                    srows = obs_seed.json().get("data", [])
+                    if srows:
+                        s = srows[0]
+                        usage = s.get("usage") if isinstance(s.get("usage"), dict) else {}
+                        total_tokens = (
+                            s.get("totalTokens")
+                            or usage.get("totalTokens")
+                            or usage.get("inputTokens")
+                            or 0
+                        )
+                        total_cost = (
+                            s.get("totalCost")
+                            or (usage.get("totalCost") if isinstance(usage, dict) else None)
+                            or 0
+                        )
+                        print(
+                            "Langfuse seed observation check: 200 OK id={} total_tokens={} total_cost_usd={}".format(
+                                s.get("id", "-"),
+                                total_tokens,
+                                total_cost,
+                            )
+                        )
+                    else:
+                        print("Langfuse seed observation check: 200 OK but no rows yet")
+                else:
+                    print(
+                        f"Langfuse seed observation check: HTTP {obs_seed.status_code}"
+                    )
         except Exception as e:
             print(f"Langfuse seed generation skipped: {e}")
 
