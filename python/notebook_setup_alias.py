@@ -27,6 +27,7 @@ def aws_auth_phase_setup() -> dict:
             "boto3",
             "botocore",
             "requests",
+            "langfuse",
         ],
         check=True,
         stdout=subprocess.DEVNULL,
