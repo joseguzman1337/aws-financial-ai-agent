@@ -26,7 +26,7 @@ from botocore.credentials import Credentials
 
 
 class NotebookRuntimeCore:
-    RUNTIME_VERSION = "2026-03-08-observability-v3"
+    RUNTIME_VERSION = "2026-03-08-observability-v4"
 
     def __init__(
         self,
@@ -1109,6 +1109,11 @@ class NotebookRuntimeCore:
                             "Cost note: no per-observation cost found in Langfuse data. "
                             "Enable/verify model price mapping or send usage+cost with generations."
                         )
+                elif "rows" in locals() and rows:
+                    # Keep messaging consistent when both paths have data.
+                    print(
+                        "Cost note: metrics(v2) remains the authoritative aggregate source."
+                    )
             else:
                 snippet = ""
                 try:
