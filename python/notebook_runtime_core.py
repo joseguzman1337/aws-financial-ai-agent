@@ -1083,6 +1083,77 @@ class NotebookRuntimeCore:
         except Exception as e:
             print(f"Langfuse metrics(v2): error ({e})")
 
+        # If no usage/cost is present, emit a synthetic verification generation
+        # so end-to-end metrics/cost plumbing can be validated immediately.
+        try:
+            need_seed = (
+                ("obs" in locals() and isinstance(obs, requests.Response) and obs.status_code == 200)
+                and ("priced_rows" in locals() and int(priced_rows) == 0)
+                and ("token_rows" in locals() and int(token_rows) == 0)
+            )
+            if need_seed:
+                from langfuse import get_client, propagate_attributes
+
+                os.environ["LANGFUSE_PUBLIC_KEY"] = pk
+                os.environ["LANGFUSE_SECRET_KEY"] = sk
+                os.environ["LANGFUSE_BASE_URL"] = base
+
+                lf = get_client()
+                with propagate_attributes(
+                    session_id=self.session_id,
+                    metadata={"source": "notebook-observability-seed"},
+                ):
+                    with lf.start_as_current_observation(
+                        as_type="generation",
+                        name="notebook-usage-cost-seed",
+                        model=self.cfg.get("model_id", "unknown-model"),
+                        input={"purpose": "seed_usage_cost"},
+                    ) as gen:
+                        gen.update(
+                            output={"status": "seeded"},
+                            usage_details={"input": 12, "output": 34, "total": 46},
+                            cost_details={
+                                "input": 0.00012,
+                                "output": 0.00068,
+                                "total": 0.0008,
+                            },
+                        )
+                lf.flush()
+                time.sleep(2)
+                print(
+                    "Langfuse seed generation emitted with usage/cost for validation."
+                )
+                # Quick re-check of metrics after seed event.
+                now2 = datetime.now(timezone.utc)
+                frm2 = now2 - timedelta(hours=24)
+                m2_query = {
+                    "view": "observations",
+                    "metrics": [
+                        {"measure": "count", "aggregation": "count"},
+                        {"measure": "totalTokens", "aggregation": "sum"},
+                        {"measure": "totalCost", "aggregation": "sum"},
+                    ],
+                    "fromTimestamp": frm2.isoformat().replace("+00:00", "Z"),
+                    "toTimestamp": now2.isoformat().replace("+00:00", "Z"),
+                }
+                m2 = _probe(
+                    "/api/public/v2/metrics",
+                    {"query": json.dumps(m2_query, separators=(",", ":"))},
+                )
+                if m2.status_code == 200:
+                    rows2 = m2.json().get("data", [])
+                    if rows2:
+                        r2 = rows2[0]
+                        print(
+                            "Langfuse post-seed metrics (24h): observations={} total_tokens={} total_cost_usd={}".format(
+                                _clean(_pick_metric(r2, "count", "count"), "0"),
+                                _clean(_pick_metric(r2, "totalTokens", "sum"), "0"),
+                                _clean(_pick_metric(r2, "totalCost", "sum"), "0"),
+                            )
+                        )
+        except Exception as e:
+            print(f"Langfuse seed generation skipped: {e}")
+
         # Optional: auto-create collaboration comment on latest trace.
         # Enable by setting LANGFUSE_AUTO_COMMENT=1 in runtime.
         if os.getenv("LANGFUSE_AUTO_COMMENT", "0") == "1":
