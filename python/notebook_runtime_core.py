@@ -26,7 +26,7 @@ from botocore.credentials import Credentials
 
 
 class NotebookRuntimeCore:
-    RUNTIME_VERSION = "2026-03-07-observability-v2"
+    RUNTIME_VERSION = "2026-03-08-observability-v3"
 
     def __init__(
         self,
@@ -711,6 +711,18 @@ class NotebookRuntimeCore:
                     return v
             return None
 
+        def _pick_any_cost(row: dict[str, Any]) -> Any:
+            # Direct known keys first
+            for k in ("totalCost", "sum_totalCost", "cost", "value"):
+                if row.get(k) is not None:
+                    return row.get(k)
+            # Fuzzy fallback
+            for k, v in row.items():
+                lk = str(k).lower()
+                if "cost" in lk and v is not None:
+                    return v
+            return None
+
         auth = _probe("/api/public/projects")
         if auth.status_code == 200:
             print("Langfuse auth: 200 OK")
@@ -912,11 +924,13 @@ class NotebookRuntimeCore:
             if m_daily.status_code == 200:
                 drows = m_daily.json().get("data", [])
                 print(f"Langfuse daily cost(v2): 200 OK rows={len(drows)}")
-                for r in drows[:7]:
+                for i, r in enumerate(drows[:7], start=1):
                     day = _pick_time_bucket(r)
                     cost = _pick_metric(r, "totalCost", "sum")
+                    if cost is None:
+                        cost = _pick_any_cost(r)
                     print(
-                        f"  - day={_clean(day)} total_cost_usd={_clean(cost, '0')}"
+                        f"  - day={_clean(day, str(i))} total_cost_usd={_clean(cost, '0')}"
                     )
             else:
                 print(f"Langfuse daily cost(v2): HTTP {m_daily.status_code}")
@@ -960,9 +974,11 @@ class NotebookRuntimeCore:
 
             # Fallback: aggregate cost/tokens from raw observations.
             obs = _probe("/api/public/v2/observations", {"limit": 200})
-            if obs.status_code == 400:
-                # Compatibility fallback for older projects/routes.
-                obs = _probe("/api/public/observations", {"limit": 200})
+            if obs.status_code >= 400:
+                # Compatibility fallback for older projects/routes and query variants.
+                obs = _probe("/api/public/observations", {"page": 1, "limit": 200})
+            if obs.status_code >= 400:
+                obs = _probe("/api/public/observations", {})
             if obs.status_code == 200:
                 orows = obs.json().get("data", [])
                 total_cost = 0.0
@@ -1026,7 +1042,17 @@ class NotebookRuntimeCore:
                         "Enable/verify model price mapping or send usage+cost with generations."
                     )
             else:
-                print(f"Langfuse observations fallback: HTTP {obs.status_code}")
+                snippet = ""
+                try:
+                    snippet = (obs.text or "")[:220].replace("\n", " ")
+                except Exception:
+                    snippet = ""
+                if snippet:
+                    print(
+                        f"Langfuse observations fallback: HTTP {obs.status_code} body={snippet}"
+                    )
+                else:
+                    print(f"Langfuse observations fallback: HTTP {obs.status_code}")
         except Exception as e:
             print(f"Langfuse metrics(v2): error ({e})")
 
