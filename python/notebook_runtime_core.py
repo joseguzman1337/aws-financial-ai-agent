@@ -1086,10 +1086,29 @@ class NotebookRuntimeCore:
                     )
                 )
                 if priced_rows == 0:
-                    print(
-                        "Cost note: no per-observation cost found in Langfuse data. "
-                        "Enable/verify model price mapping or send usage+cost with generations."
-                    )
+                    # If metrics already have cost/tokens, observation payload likely omits usage fields.
+                    metrics_tokens = None
+                    metrics_cost = None
+                    try:
+                        if "rows" in locals() and rows:
+                            metrics_tokens = _pick_metric(
+                                rows[0], "totalTokens", "sum"
+                            )
+                            metrics_cost = _pick_metric(
+                                rows[0], "totalCost", "sum"
+                            )
+                    except Exception:
+                        pass
+                    if metrics_tokens or metrics_cost:
+                        print(
+                            "Cost note: observations endpoint in this project omits usage/cost fields; "
+                            "using metrics(v2) as source of truth."
+                        )
+                    else:
+                        print(
+                            "Cost note: no per-observation cost found in Langfuse data. "
+                            "Enable/verify model price mapping or send usage+cost with generations."
+                        )
             else:
                 snippet = ""
                 try:
@@ -1220,6 +1239,11 @@ class NotebookRuntimeCore:
                                 total_cost,
                             )
                         )
+                        if (not total_cost) and "rows2" in locals() and rows2:
+                            print(
+                                "Langfuse seed note: observation detail omits cost field; "
+                                "metrics(v2) includes seeded cost."
+                            )
                     else:
                         print("Langfuse seed observation check: 200 OK but no rows yet")
                 else:
