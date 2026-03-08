@@ -46,11 +46,15 @@ async def invoke_agent(request: Request):
     session_id = request.headers.get(
         "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id", str(uuid.uuid4())
     )
+    user_id = request.headers.get("X-User-Id")
     logger.info("Invocation received. Session ID: %s", session_id)
 
     try:
         payload = await request.json()
         query = payload.get("prompt")
+        # Prefer explicit payload user_id over header if provided.
+        if payload.get("user_id"):
+            user_id = str(payload.get("user_id"))
         logger.info("Query: %s", query)
 
         langfuse_enabled = ensure_langfuse_env()
@@ -70,6 +74,7 @@ async def invoke_agent(request: Request):
             "callbacks": callbacks,
             "metadata": {
                 "langfuse_session_id": session_id,
+                "langfuse_user_id": user_id,
                 "agent_runtime": "Financial_Analyst_Agent",
                 "has_prompt": bool(query),
             },
@@ -83,9 +88,16 @@ async def invoke_agent(request: Request):
                     with langfuse.start_as_current_observation(
                         as_type="span",
                         name="agentcore-invocation",
-                        input={"session_id": session_id, "prompt": query},
+                        input={
+                            "session_id": session_id,
+                            "user_id": user_id,
+                            "prompt": query,
+                        },
                     ) as span:
-                        with propagate_attributes(session_id=session_id):
+                        with propagate_attributes(
+                            session_id=session_id,
+                            user_id=user_id,
+                        ):
                             result = await get_agent_graph().ainvoke(
                                 agent_input, config=config
                             )
