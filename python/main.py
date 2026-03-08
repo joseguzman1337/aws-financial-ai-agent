@@ -13,8 +13,8 @@ import uuid
 from agent import get_agent_graph
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
-from langfuse import get_client, propagate_attributes
-from langfuse_config import ensure_langfuse_env
+from langfuse import propagate_attributes
+from langfuse_config import ensure_langfuse_env, get_langfuse_client
 from langfuse.langchain import CallbackHandler
 
 # Configure logging to stdout
@@ -32,6 +32,19 @@ logger.info("FastAPI application initialized.")
 _ENV_RE = re.compile(r"^(?!langfuse)[a-z0-9-_]{1,40}$")
 _META_KEY_RE = re.compile(r"^[A-Za-z0-9]+$")
 _TRACE_ID_RE = re.compile(r"^[a-f0-9]{32}$")
+_LEVELS = {"DEBUG", "DEFAULT", "WARNING", "ERROR"}
+_OBS_TYPES = {
+    "event",
+    "span",
+    "generation",
+    "agent",
+    "tool",
+    "chain",
+    "retriever",
+    "evaluator",
+    "embedding",
+    "guardrail",
+}
 
 
 def _resolve_langfuse_environment(payload: dict, request: Request) -> str:
@@ -102,12 +115,75 @@ def _resolve_external_trace_seed(payload: dict, request: Request) -> str | None:
     return None
 
 
+def _resolve_log_level(payload: dict, request: Request) -> str:
+    level = (
+        payload.get("langfuse_level")
+        or request.headers.get("X-Langfuse-Level")
+        or "DEFAULT"
+    )
+    lv = str(level).strip().upper()
+    return lv if lv in _LEVELS else "DEFAULT"
+
+
+def _resolve_status_message(payload: dict, request: Request) -> str | None:
+    msg = payload.get("langfuse_status_message") or request.headers.get(
+        "X-Langfuse-Status-Message"
+    )
+    if msg is None:
+        return None
+    txt = str(msg).strip()
+    return txt[:500] if txt else None
+
+
+def _resolve_observation_type(payload: dict, request: Request) -> str:
+    raw = payload.get("langfuse_observation_type") or request.headers.get(
+        "X-Langfuse-Observation-Type"
+    )
+    t = str(raw).strip().lower() if raw is not None else "span"
+    return t if t in _OBS_TYPES else "span"
+
+
+def _resolve_release(payload: dict, request: Request) -> str | None:
+    release = (
+        payload.get("langfuse_release")
+        or request.headers.get("X-Langfuse-Release")
+        or os.getenv("LANGFUSE_RELEASE")
+    )
+    if release is None:
+        return None
+    txt = str(release).strip()
+    return txt[:120] if txt else None
+
+
+def _resolve_version(payload: dict, request: Request) -> str | None:
+    version = payload.get("langfuse_version") or request.headers.get(
+        "X-Langfuse-Version"
+    )
+    if version is None:
+        return None
+    txt = str(version).strip()
+    return txt[:60] if txt else None
+
+
+def _resolve_numeric_map(payload: dict, key: str) -> dict[str, float]:
+    raw = payload.get(key)
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, float] = {}
+    for k, v in raw.items():
+        try:
+            out[str(k)] = float(v)
+        except Exception:
+            continue
+    return out
+
+
 @app.on_event("shutdown")
 async def flush_langfuse():
     """Flush Langfuse events on graceful shutdown."""
     if ensure_langfuse_env():
         try:
-            get_client().flush()
+            get_langfuse_client().flush()
         except Exception as error:  # pragma: no cover
             logger.warning("Langfuse flush failed: %s", str(error))
 
@@ -133,6 +209,13 @@ async def invoke_agent(request: Request):
         langfuse_tags = _resolve_langfuse_tags(payload, request)
         langfuse_metadata = _resolve_langfuse_metadata(payload)
         external_trace_seed = _resolve_external_trace_seed(payload, request)
+        log_level = _resolve_log_level(payload, request)
+        status_message = _resolve_status_message(payload, request)
+        observation_type = _resolve_observation_type(payload, request)
+        release = _resolve_release(payload, request)
+        version = _resolve_version(payload, request)
+        usage_details = _resolve_numeric_map(payload, "langfuse_usage_details")
+        cost_details = _resolve_numeric_map(payload, "langfuse_cost_details")
         logger.info("Query: %s", query)
 
         langfuse_enabled = ensure_langfuse_env()
@@ -144,7 +227,7 @@ async def invoke_agent(request: Request):
                     trace_context = {"trace_id": external_trace_seed}
                 else:
                     try:
-                        trace_id = get_client().create_trace_id(
+                        trace_id = get_langfuse_client().create_trace_id(
                             seed=external_trace_seed
                         )
                         trace_context = {"trace_id": trace_id}
@@ -153,6 +236,7 @@ async def invoke_agent(request: Request):
             langfuse_handler = CallbackHandler(
                 trace_context=trace_context,
                 environment=tracing_environment,
+                version=version,
             )
             callbacks = [langfuse_handler]
         else:
@@ -170,6 +254,13 @@ async def invoke_agent(request: Request):
                 "langfuse_tags": langfuse_tags,
                 "langfuse_metadata": langfuse_metadata,
                 "langfuse_trace_seed": external_trace_seed,
+                "langfuse_level": log_level,
+                "langfuse_status_message": status_message,
+                "langfuse_observation_type": observation_type,
+                "langfuse_release": release,
+                "langfuse_version": version,
+                "langfuse_usage_keys": sorted(list(usage_details.keys())),
+                "langfuse_cost_keys": sorted(list(cost_details.keys())),
                 "agent_runtime": "Financial_Analyst_Agent",
                 "has_prompt": bool(query),
             },
@@ -178,16 +269,21 @@ async def invoke_agent(request: Request):
 
         async def stream_generator():
             try:
-                langfuse = get_client() if langfuse_enabled else None
+                langfuse = get_langfuse_client() if langfuse_enabled else None
                 if langfuse:
                     with langfuse.start_as_current_observation(
-                        as_type="span",
+                        as_type=observation_type,
                         name="agentcore-invocation",
                         trace_context=trace_context,
+                        level=log_level,
+                        status_message=status_message,
+                        version=version,
                         input={
                             "session_id": session_id,
                             "user_id": user_id,
                             "environment": tracing_environment,
+                            "release": release,
+                            "version": version,
                             "trace_seed": external_trace_seed,
                             "tags": langfuse_tags,
                             "metadata": langfuse_metadata,
@@ -198,13 +294,26 @@ async def invoke_agent(request: Request):
                             session_id=session_id,
                             user_id=user_id,
                             environment=tracing_environment,
+                            version=version,
                             tags=langfuse_tags,
                             metadata=langfuse_metadata,
                         ):
                             result = await get_agent_graph().ainvoke(
                                 agent_input, config=config
                             )
-                        span.update(output={"status": "ok"})
+                        span.update(
+                            output={"status": "ok"},
+                            level=log_level,
+                            status_message=status_message or "Invocation completed",
+                            usage_details=usage_details if usage_details else None,
+                            cost_details=cost_details if cost_details else None,
+                        )
+                        try:
+                            trace_id = langfuse.get_current_trace_id()
+                            trace_url = langfuse.get_trace_url(trace_id=trace_id)
+                            yield f"data: {json.dumps({'trace_id': trace_id, 'trace_url': trace_url})}\n\n"
+                        except Exception:
+                            pass
                 else:
                     result = await get_agent_graph().ainvoke(
                         agent_input, config=config
@@ -218,6 +327,14 @@ async def invoke_agent(request: Request):
                         break
             except Exception as e:
                 logger.error("Streaming error: %s", str(e))
+                if langfuse_enabled:
+                    try:
+                        get_langfuse_client().update_current_span(
+                            level="ERROR",
+                            status_message=str(e)[:500],
+                        )
+                    except Exception:
+                        pass
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
         return StreamingResponse(

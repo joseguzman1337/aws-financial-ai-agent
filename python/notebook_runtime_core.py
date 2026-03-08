@@ -782,6 +782,7 @@ class NotebookRuntimeCore:
             "/api/public/traces",
             {"sessionId": self.session_id, "limit": 5},
         )
+        recent_fallback_traces: list[dict[str, Any]] = []
         if traces.status_code == 200:
             data = traces.json().get("data", [])
             print(
@@ -855,6 +856,9 @@ class NotebookRuntimeCore:
                 if recent.status_code == 200:
                     rdata = recent.json().get("data", [])
                     if rdata:
+                        recent_fallback_traces = [
+                            x for x in rdata if isinstance(x, dict)
+                        ]
                         print("Langfuse recent traces fallback:")
                         for idx, t in enumerate(rdata[:3], start=1):
                             print(
@@ -868,6 +872,29 @@ class NotebookRuntimeCore:
                             )
         else:
             print(f"Langfuse traces: HTTP {traces.status_code}")
+
+        # Comments: fetch latest comments for collaboration context.
+        comments_resp = _probe("/api/public/comments", {"limit": 5, "page": 1})
+        comments_data: list[dict[str, Any]] = []
+        if comments_resp.status_code == 200:
+            comments_data = [
+                x
+                for x in comments_resp.json().get("data", [])
+                if isinstance(x, dict)
+            ]
+            print(f"Langfuse comments: 200 OK count={len(comments_data)}")
+            for c in comments_data[:3]:
+                print(
+                    "  - id={} objectType={} objectId={} author={} ts={}".format(
+                        c.get("id", "-"),
+                        c.get("objectType", "-"),
+                        c.get("objectId", "-"),
+                        c.get("authorUserId", "-"),
+                        c.get("createdAt", "-"),
+                    )
+                )
+        else:
+            print(f"Langfuse comments: HTTP {comments_resp.status_code}")
 
         # Dashboard-like metrics snapshot (last 24h) via v2 metrics API.
         try:
@@ -1056,6 +1083,36 @@ class NotebookRuntimeCore:
         except Exception as e:
             print(f"Langfuse metrics(v2): error ({e})")
 
+        # Optional: auto-create collaboration comment on latest trace.
+        # Enable by setting LANGFUSE_AUTO_COMMENT=1 in runtime.
+        if os.getenv("LANGFUSE_AUTO_COMMENT", "0") == "1":
+            target_trace_id = None
+            try:
+                cur_traces = traces.json().get("data", []) if traces.status_code == 200 else []
+                if cur_traces and isinstance(cur_traces[0], dict):
+                    target_trace_id = cur_traces[0].get("id")
+                if not target_trace_id and recent_fallback_traces:
+                    target_trace_id = recent_fallback_traces[0].get("id")
+                if target_trace_id:
+                    payload = {
+                        "projectId": auth.json().get("data", [{}])[0].get("id"),
+                        "objectType": "trace",
+                        "objectId": target_trace_id,
+                        "content": (
+                            f"Automated notebook observability check for session "
+                            f"{self.session_id}."
+                        ),
+                    }
+                    cpost = requests.post(
+                        f"{base}/api/public/comments",
+                        auth=(pk, sk),
+                        json=payload,
+                        timeout=30,
+                    )
+                    print(f"Langfuse auto-comment: HTTP {cpost.status_code}")
+            except Exception as e:
+                print(f"Langfuse auto-comment: error ({e})")
+
         # Persist a real observability report artifact from live API responses.
         try:
             report = {
@@ -1079,6 +1136,8 @@ class NotebookRuntimeCore:
                 "metricsByModel": m_model.json()
                 if "m_model" in locals() and m_model.status_code == 200
                 else {},
+                "commentsStatus": comments_resp.status_code,
+                "comments": comments_data,
             }
             out_dir = Path("artifacts") / "langfuse"
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -1119,6 +1178,114 @@ class NotebookRuntimeCore:
                 print(f"Observability traces CSV: {traces_csv}")
         except Exception as e:
             print(f"Observability report export failed: {e}")
+
+    def _langfuse_auth_context(self) -> tuple[str, str, str]:
+        """Return (public_key, secret_key, base_url) from SSM."""
+        self.ensure_fresh()
+        pk = self.ssm_get(self.params["langfuse_pk"])
+        sk = self.ssm_get(self.params["langfuse_sk"])
+        base = self.ssm_get(self.params["langfuse_base_url"]).rstrip("/")
+        return pk, sk, base
+
+    def create_langfuse_comment(
+        self,
+        object_type: str,
+        object_id: str,
+        content: str,
+    ) -> dict[str, Any]:
+        """Create a Langfuse comment on trace/observation/session/prompt."""
+        pk, sk, base = self._langfuse_auth_context()
+        projects = requests.get(
+            f"{base}/api/public/projects",
+            auth=(pk, sk),
+            timeout=30,
+        )
+        if projects.status_code != 200:
+            return {"ok": False, "status": projects.status_code, "error": "project lookup failed"}
+        project_id = (projects.json().get("data", [{}])[0] or {}).get("id")
+        payload = {
+            "projectId": project_id,
+            "objectType": object_type,
+            "objectId": object_id,
+            "content": content[:4000],
+        }
+        resp = requests.post(
+            f"{base}/api/public/comments",
+            auth=(pk, sk),
+            json=payload,
+            timeout=30,
+        )
+        out = {"ok": resp.status_code == 200, "status": resp.status_code}
+        try:
+            out["data"] = resp.json()
+        except Exception:
+            out["text"] = (resp.text or "")[:300]
+        return out
+
+    def create_langfuse_score(
+        self,
+        trace_id: str,
+        name: str,
+        value: Any,
+        data_type: str | None = None,
+        comment: str | None = None,
+        observation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a Langfuse score (feedback/correction/etc)."""
+        pk, sk, base = self._langfuse_auth_context()
+        payload: dict[str, Any] = {
+            "traceId": trace_id,
+            "name": name,
+            "value": value,
+        }
+        if data_type:
+            payload["dataType"] = data_type
+        if comment:
+            payload["comment"] = comment
+        if observation_id:
+            payload["observationId"] = observation_id
+        resp = requests.post(
+            f"{base}/api/public/scores",
+            auth=(pk, sk),
+            json=payload,
+            timeout=30,
+        )
+        out = {"ok": resp.status_code == 200, "status": resp.status_code}
+        try:
+            out["data"] = resp.json()
+        except Exception:
+            out["text"] = (resp.text or "")[:300]
+        return out
+
+    def create_langfuse_correction(
+        self,
+        trace_id: str,
+        corrected_output: str,
+        observation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create corrected output score (dataType=CORRECTION, name=output)."""
+        return self.create_langfuse_score(
+            trace_id=trace_id,
+            observation_id=observation_id,
+            name="output",
+            value=corrected_output,
+            data_type="CORRECTION",
+        )
+
+    def create_langfuse_user_feedback(
+        self,
+        trace_id: str,
+        score_value: float,
+        comment: str | None = None,
+        name: str = "user-feedback",
+    ) -> dict[str, Any]:
+        """Create explicit user feedback score for a trace."""
+        return self.create_langfuse_score(
+            trace_id=trace_id,
+            name=name,
+            value=score_value,
+            comment=comment,
+        )
 
     def _load_langfuse_openapi_paths(self) -> set[str]:
         """Fetch Langfuse OpenAPI YAML and extract path keys."""
