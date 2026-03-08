@@ -685,6 +685,32 @@ class NotebookRuntimeCore:
                     return v
             return None
 
+        def _clean(v: Any, default: str = "-") -> str:
+            if v is None:
+                return default
+            s = str(v).strip()
+            if not s or s.lower() in ("none", "null", "nan"):
+                return default
+            return s
+
+        def _pick_time_bucket(row: dict[str, Any]) -> Any:
+            for key in (
+                "timestampDay",
+                "timeBucket",
+                "time_bucket",
+                "date",
+                "day",
+                "timestamp",
+            ):
+                if row.get(key) is not None:
+                    return row.get(key)
+            # metrics API may return unnamed dim columns
+            for k, v in row.items():
+                lk = str(k).lower()
+                if "day" in lk or "time" in lk or "bucket" in lk:
+                    return v
+            return None
+
         auth = _probe("/api/public/projects")
         if auth.status_code == 200:
             print("Langfuse auth: 200 OK")
@@ -887,15 +913,11 @@ class NotebookRuntimeCore:
                 drows = m_daily.json().get("data", [])
                 print(f"Langfuse daily cost(v2): 200 OK rows={len(drows)}")
                 for r in drows[:7]:
-                    day = (
-                        r.get("timestampDay")
-                        or r.get("date")
-                        or r.get("time_bucket")
-                        or r.get("timeBucket")
-                        or "n/a"
-                    )
+                    day = _pick_time_bucket(r)
                     cost = _pick_metric(r, "totalCost", "sum")
-                    print(f"  - day={day} total_cost_usd={cost}")
+                    print(
+                        f"  - day={_clean(day)} total_cost_usd={_clean(cost, '0')}"
+                    )
             else:
                 print(f"Langfuse daily cost(v2): HTTP {m_daily.status_code}")
 
@@ -927,13 +949,20 @@ class NotebookRuntimeCore:
                     cost = _pick_metric(r, "totalCost", "sum")
                     count = _pick_metric(r, "count", "count")
                     print(
-                        f"  - model={model} total_cost_usd={cost} observations={count}"
+                        "  - model={} total_cost_usd={} observations={}".format(
+                            _clean(model),
+                            _clean(cost, "0"),
+                            _clean(count, "0"),
+                        )
                     )
             else:
                 print(f"Langfuse cost by model(v2): HTTP {m_model.status_code}")
 
             # Fallback: aggregate cost/tokens from raw observations.
-            obs = _probe("/api/public/observations", {"limit": 200})
+            obs = _probe("/api/public/v2/observations", {"limit": 200})
+            if obs.status_code == 400:
+                # Compatibility fallback for older projects/routes.
+                obs = _probe("/api/public/observations", {"limit": 200})
             if obs.status_code == 200:
                 orows = obs.json().get("data", [])
                 total_cost = 0.0
@@ -983,7 +1012,7 @@ class NotebookRuntimeCore:
                         token_rows += 1
 
                 print(
-                    "Langfuse observations fallback: rows={} rows_with_cost={} rows_with_tokens={} total_cost_usd={} total_tokens={}".format(
+                    "Langfuse observations fallback: 200 OK rows={} rows_with_cost={} rows_with_tokens={} total_cost_usd={} total_tokens={}".format(
                         len(orows),
                         priced_rows,
                         token_rows,
