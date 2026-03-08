@@ -1015,13 +1015,32 @@ class NotebookRuntimeCore:
                 for row in orows:
                     if not isinstance(row, dict):
                         continue
+                    usage = (
+                        row.get("usage")
+                        if isinstance(row.get("usage"), dict)
+                        else {}
+                    )
+                    usage_details = (
+                        row.get("usageDetails")
+                        if isinstance(row.get("usageDetails"), dict)
+                        else {}
+                    )
+                    cost_details = (
+                        row.get("costDetails")
+                        if isinstance(row.get("costDetails"), dict)
+                        else {}
+                    )
                     # Handle common cost key variants across versions.
                     cost_candidates = [
                         row.get("totalCost"),
                         row.get("cost"),
-                        (row.get("usage") or {}).get("totalCost")
-                        if isinstance(row.get("usage"), dict)
-                        else None,
+                        usage.get("totalCost"),
+                        usage_details.get("totalCost"),
+                        usage_details.get("cost"),
+                        cost_details.get("total"),
+                        cost_details.get("totalCost"),
+                        cost_details.get("input"),
+                        cost_details.get("output"),
                     ]
                     cval = next(
                         (
@@ -1035,12 +1054,15 @@ class NotebookRuntimeCore:
                         total_cost += cval
                         priced_rows += 1
 
-                    usage = row.get("usage") if isinstance(row.get("usage"), dict) else {}
                     tok_candidates = [
                         row.get("totalTokens"),
                         usage.get("totalTokens"),
+                        usage_details.get("total"),
+                        usage_details.get("totalTokens"),
                         usage.get("inputTokens"),
                         usage.get("outputTokens"),
+                        usage_details.get("input"),
+                        usage_details.get("output"),
                     ]
                     tval = next(
                         (
@@ -1160,16 +1182,35 @@ class NotebookRuntimeCore:
                     srows = obs_seed.json().get("data", [])
                     if srows:
                         s = srows[0]
-                        usage = s.get("usage") if isinstance(s.get("usage"), dict) else {}
+                        usage = (
+                            s.get("usage")
+                            if isinstance(s.get("usage"), dict)
+                            else {}
+                        )
+                        usage_details = (
+                            s.get("usageDetails")
+                            if isinstance(s.get("usageDetails"), dict)
+                            else {}
+                        )
+                        cost_details = (
+                            s.get("costDetails")
+                            if isinstance(s.get("costDetails"), dict)
+                            else {}
+                        )
                         total_tokens = (
                             s.get("totalTokens")
                             or usage.get("totalTokens")
+                            or usage_details.get("total")
+                            or usage_details.get("totalTokens")
                             or usage.get("inputTokens")
                             or 0
                         )
                         total_cost = (
                             s.get("totalCost")
-                            or (usage.get("totalCost") if isinstance(usage, dict) else None)
+                            or usage.get("totalCost")
+                            or usage_details.get("totalCost")
+                            or cost_details.get("total")
+                            or cost_details.get("totalCost")
                             or 0
                         )
                         print(
