@@ -32,6 +32,16 @@ runtime_init <- function(cfg = default_cfg, params = default_params) {
   list(core = core)
 }
 
+refresh_runtime <- function(rt = NULL, cfg = default_cfg, params = default_params) {
+  # Force rebuild of runtime state from latest downloaded Python file.
+  if (!is.null(rt)) {
+    cfg <- tryCatch(rt$core$cfg, error = function(e) cfg)
+    params <- tryCatch(rt$core$params, error = function(e) params)
+  }
+  fresh <- runtime_init(cfg = cfg, params = params)
+  refresh_clients(fresh)
+}
+
 refresh_clients <- function(rt) {
   rt$core$refresh_clients()
   rt

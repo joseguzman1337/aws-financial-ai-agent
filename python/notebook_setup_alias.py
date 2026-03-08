@@ -80,4 +80,7 @@ def aws_auth_phase_setup() -> dict:
     robjects.r(f"source('{r_file}')")
     robjects.r("rt <- runtime_init(); rt <- refresh_clients(rt)")
     # Keep first block output minimal (neofetch only).
-    return {"robjects": robjects}
+    return {
+        "robjects": robjects,
+        "refresh_cmd": "rt <- refresh_runtime(rt)",
+    }
