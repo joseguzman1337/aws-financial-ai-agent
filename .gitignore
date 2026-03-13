@@ -15,3 +15,6 @@ __pycache__/
 .infracost/
 node_modules/
 .mypy_cache/
+
+# macOS system files
+._*
