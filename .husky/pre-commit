@@ -1,0 +1,37 @@
+#!/bin/sh
+export INFRACOST_API_KEY="ico-7MzaBsXdhbOIS6ZIVjlRU6RIIcTLKW0m"
+export SNYK_TOKEN="3d662e89-553c-465f-8d0a-bca496c32ead"
+
+# Note: We removed --all-files so it only scans modified/staged files.
+# Individual execution is maintained to prevent resource-heavy hangs.
+
+echo "Running pre-commit hooks on modified files..."
+
+# Ensure CodeRabbit configuration is intact
+if [ ! -f .coderabbit.yaml ]; then
+    echo "❌ ERROR: .coderabbit.yaml is missing. CodeRabbit review is required."
+    exit 1
+fi
+
+# R language quality gate (syntax + styler auto-fix + lintr)
+sh scripts/r_quality.sh
+
+pre-commit run trailing-whitespace
+pre-commit run end-of-file-fixer
+pre-commit run check-yaml
+pre-commit run check-json
+pre-commit run check-added-large-files
+pre-commit run black
+pre-commit run isort
+pre-commit run ruff
+pre-commit run flake8
+pre-commit run pylint
+pre-commit run mypy
+pre-commit run checkov
+pre-commit run tflint
+pre-commit run terrascan
+pre-commit run kics
+pre-commit run trivy
+pre-commit run grype
+pre-commit run snyk
+pre-commit run infracost

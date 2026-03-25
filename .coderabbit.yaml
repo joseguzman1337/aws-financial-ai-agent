@@ -1,0 +1,24 @@
+# CodeRabbit Configuration
+# Documentation: https://docs.coderabbit.ai/configuration/overview
+
+# Reviews are enabled for all pull requests by default.
+# This configuration specifically targets the main branch.
+
+version: "1.0"
+language: "en-US"
+
+reviews:
+  profile: "chill" # Options: chill, assertive, obsessive
+  request_review_on_public_repos: true
+  auto_review:
+    enabled: true
+    draft: false
+    base_branches:
+      - "main"
+
+chat:
+  enabled: true
+
+# Enable step-by-step instructions for recruiters
+wiki:
+  enabled: true
