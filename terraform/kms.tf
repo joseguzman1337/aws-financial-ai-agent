@@ -74,6 +74,24 @@ resource "aws_kms_key" "app_secrets" {
         Resource = "*"
       },
       {
+        Sid    = "Allow access for t1cx profile"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            "arn:aws:iam::162187491349:user/joseguzman1337",
+            "arn:aws:iam::162187491349:user/t1cx"
+          ]
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      },
+      {
         Sid    = "Allow CloudWatch Logs"
         Effect = "Allow"
         Principal = {
@@ -106,6 +124,18 @@ resource "aws_kms_key" "app_secrets" {
 resource "aws_kms_alias" "app_secrets_alias" {
   name          = "alias/financial-ai-agent-secrets"
   target_key_id = aws_kms_key.app_secrets.key_id
+}
+
+resource "aws_ssm_parameter" "aws_profile" {
+  name   = "/financial-ai/aws-profile"
+  type   = "String"
+  value  = "t1cx"
+  key_id = aws_kms_key.app_secrets.arn
+  tags = {
+    Project     = "FinancialAIAgent"
+    Environment = "Development"
+    ManagedBy   = "Terraform"
+  }
 }
 
 resource "aws_ssm_parameter" "analyst_username" {
